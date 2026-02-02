@@ -16,7 +16,7 @@ This document tracks the progress of implementation steps for the Bowtie Risk An
 | 0.2.2 | ✅ Done | Publish clean initial history on main |
 | 0.2.3 | ✅ Done | Create GitHub repo + push main |
 | 0.2.4 | ✅ Done | Enforce clean commit metadata + local safeguards |
-| 0.2.5 | ⏳ In Progress | Update DEVLOG + STEP_TRACKER and push docs |
+| 0.2.5 | ✅ Done | Update DEVLOG + STEP_TRACKER and push docs |
 | 0.3   | ⏳ Pending | Run pipeline end-to-end (deterministic outputs) |
 
 ### Phase 1 — Data & Schema Foundation
