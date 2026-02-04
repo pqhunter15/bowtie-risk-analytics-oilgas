@@ -4,6 +4,7 @@
 - [x] Project scaffold and dependencies
 - [x] Git configuration and hygiene
 - [x] Initial documentation (Devlog, decisions)
+- [x] End-to-end pipeline verification (Step 0.3)
 
 ## Phase 1: Data Pipeline
 - [x] Bowtie JSON schema definition
