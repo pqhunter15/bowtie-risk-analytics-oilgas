@@ -6,7 +6,7 @@
 - [x] Initial documentation (Devlog, decisions)
 
 ## Phase 1: Data Pipeline
-- [ ] Bowtie JSON schema definition
+- [x] Bowtie JSON schema definition
 - [ ] Incident narrative ingestion
 - [ ] Labeling strategy and dataset creation
 
