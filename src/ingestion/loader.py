@@ -33,10 +33,10 @@ def load_incident_from_text(text: str) -> Incident:
             continue
 
         # Check for Key: Value pattern
-        match = re.match(r'^([A-Za-z]+):\s*(.*)', line)
+        match = re.match(r'^([A-Za-z\s]+):\s*(.*)', line)
         if match:
-            key = match.group(1).lower()
-            value = match.group(2)
+            key = match.group(1).lower().strip()
+            value = match.group(2).strip()
             data[key] = value
             current_key = key
         elif current_key and current_key == 'description':
@@ -57,8 +57,14 @@ def load_incident_from_text(text: str) -> Incident:
             # For now, just ignore invalid dates or let it be None
             pass
 
+    # Parse lists (comma-separated)
+    prevention_barriers = [b.strip() for b in data.get('prevention barriers', '').split(',') if b.strip()]
+    mitigation_barriers = [b.strip() for b in data.get('mitigation barriers', '').split(',') if b.strip()]
+
     return Incident(
         incident_id=data['id'],
         date=incident_date,
-        description=data['description']
+        description=data['description'],
+        prevention_barriers=prevention_barriers,
+        mitigation_barriers=mitigation_barriers
     )

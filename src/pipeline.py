@@ -2,10 +2,12 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from src.ingestion.loader import load_incident_from_text
 from src.models.incident import Incident
+from src.models.bowtie import Bowtie
+from src.analytics.engine import calculate_barrier_coverage, identify_gaps
 
 # Configure logging
 logging.basicConfig(
@@ -14,13 +16,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def process_raw_files(raw_dir: Path, processed_dir: Path) -> List[Incident]:
+def load_bowtie(bowtie_path: Path) -> Optional[Bowtie]:
+    """Loads a Bowtie definition from a JSON file."""
+    if not bowtie_path.exists():
+        logger.warning(f"Bowtie definition not found at {bowtie_path}")
+        return None
+
+    try:
+        data = json.loads(bowtie_path.read_text(encoding='utf-8'))
+        return Bowtie(**data)
+    except Exception as e:
+        logger.error(f"Failed to load Bowtie definition: {e}")
+        return None
+
+def process_raw_files(raw_dir: Path, processed_dir: Path, bowtie_path: Optional[Path] = None) -> List[Incident]:
     """
-    Reads raw text files, parses incidents, and saves structured JSON.
+    Reads raw text files, parses incidents, computes analytics, and saves structured JSON.
 
     Args:
         raw_dir: Directory containing raw text files.
         processed_dir: Directory to save processed JSON files.
+        bowtie_path: Path to the reference Bowtie JSON file (optional).
 
     Returns:
         List of successfully processed Incident objects.
@@ -32,6 +48,11 @@ def process_raw_files(raw_dir: Path, processed_dir: Path) -> List[Incident]:
         return []
 
     processed_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load Bowtie reference if provided
+    bowtie = load_bowtie(bowtie_path) if bowtie_path else None
+    if bowtie:
+        logger.info(f"Loaded Bowtie reference: {bowtie.hazard} -> {bowtie.top_event}")
 
     for file_path in raw_dir.glob("*.txt"):
         logger.info(f"Processing file: {file_path.name}")
@@ -49,9 +70,23 @@ def process_raw_files(raw_dir: Path, processed_dir: Path) -> List[Incident]:
                     incident = load_incident_from_text(block)
                     processed_incidents.append(incident)
 
-                    # Save individual JSON
+                    # Prepare output data
+                    output_data = incident.model_dump()
+
+                    # Run analytics if Bowtie is available
+                    if bowtie:
+                        coverage = calculate_barrier_coverage(incident, bowtie)
+                        gaps = identify_gaps(incident, bowtie)
+
+                        output_data["analytics"] = {
+                            "coverage": coverage,
+                            "gaps": [gap.model_dump() for gap in gaps]
+                        }
+                        logger.info(f"Analyzed {incident.incident_id}: Coverage={coverage['overall_coverage']:.1%}, Gaps={len(gaps)}")
+
+                    # Save enriched JSON
                     output_file = processed_dir / f"{incident.incident_id}.json"
-                    output_file.write_text(incident.model_dump_json(indent=2), encoding='utf-8')
+                    output_file.write_text(json.dumps(output_data, indent=2, default=str), encoding='utf-8')
                     logger.info(f"Saved {incident.incident_id}")
 
                 except ValueError as e:
@@ -65,11 +100,9 @@ def process_raw_files(raw_dir: Path, processed_dir: Path) -> List[Incident]:
 
 if __name__ == "__main__":
     # Define paths relative to the project root
-    # Assuming this script is at src/pipeline.py, project root is one level up?
-    # No, src/ is one level up from pipeline.py? No, pipeline.py is IN src/.
-    # So __file__ = src/pipeline.py. parent = src. parent.parent = root.
     BASE_DIR = Path(__file__).resolve().parent.parent
     RAW_DIR = BASE_DIR / "data" / "raw"
     PROCESSED_DIR = BASE_DIR / "data" / "processed"
+    BOWTIE_PATH = BASE_DIR / "data" / "sample" / "bowtie_loc.json"
 
-    process_raw_files(RAW_DIR, PROCESSED_DIR)
+    process_raw_files(RAW_DIR, PROCESSED_DIR, BOWTIE_PATH)

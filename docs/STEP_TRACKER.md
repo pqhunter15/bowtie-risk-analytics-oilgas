@@ -14,7 +14,7 @@
 ## Phase 2: Analytics
 - [x] Control coverage computation
 - [x] Gap analysis reporting
-- [ ] Baseline metrics
+- [x] Baseline metrics (Per-incident coverage)
 
 ## Phase 3: Modeling
 - [ ] Baseline model (Logistic Regression)
