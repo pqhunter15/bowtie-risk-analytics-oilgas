@@ -12,8 +12,8 @@
 - [ ] Labeling strategy and dataset creation
 
 ## Phase 2: Analytics
-- [ ] Control coverage computation
-- [ ] Gap analysis reporting
+- [x] Control coverage computation
+- [x] Gap analysis reporting
 - [ ] Baseline metrics
 
 ## Phase 3: Modeling
