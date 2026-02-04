@@ -7,7 +7,7 @@
 
 ## Phase 1: Data Pipeline
 - [x] Bowtie JSON schema definition
-- [ ] Incident narrative ingestion
+- [x] Incident narrative ingestion
 - [ ] Labeling strategy and dataset creation
 
 ## Phase 2: Analytics
