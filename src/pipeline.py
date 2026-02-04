@@ -8,6 +8,7 @@ from src.ingestion.loader import load_incident_from_text
 from src.models.incident import Incident
 from src.models.bowtie import Bowtie
 from src.analytics.engine import calculate_barrier_coverage, identify_gaps
+from src.analytics.aggregation import calculate_fleet_metrics
 
 # Configure logging
 logging.basicConfig(
@@ -42,6 +43,7 @@ def process_raw_files(raw_dir: Path, processed_dir: Path, bowtie_path: Optional[
         List of successfully processed Incident objects.
     """
     processed_incidents = []
+    all_output_data = []
 
     if not raw_dir.exists():
         logger.error(f"Raw directory not found: {raw_dir}")
@@ -84,6 +86,8 @@ def process_raw_files(raw_dir: Path, processed_dir: Path, bowtie_path: Optional[
                         }
                         logger.info(f"Analyzed {incident.incident_id}: Coverage={coverage['overall_coverage']:.1%}, Gaps={len(gaps)}")
 
+                    all_output_data.append(output_data)
+
                     # Save enriched JSON
                     output_file = processed_dir / f"{incident.incident_id}.json"
                     output_file.write_text(json.dumps(output_data, indent=2, default=str), encoding='utf-8')
@@ -94,6 +98,13 @@ def process_raw_files(raw_dir: Path, processed_dir: Path, bowtie_path: Optional[
 
         except Exception as e:
             logger.error(f"Error reading file {file_path.name}: {e}")
+
+    # Calculate and save aggregate metrics
+    if all_output_data:
+        metrics = calculate_fleet_metrics(all_output_data)
+        metrics_file = processed_dir / "fleet_metrics.json"
+        metrics_file.write_text(json.dumps(metrics, indent=2), encoding='utf-8')
+        logger.info(f"Saved fleet metrics to {metrics_file.name}")
 
     logger.info(f"Pipeline finished. Processed {len(processed_incidents)} incidents.")
     return processed_incidents
