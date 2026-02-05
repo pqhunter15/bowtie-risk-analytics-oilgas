@@ -9,19 +9,20 @@ PROCESSED_DIR = BASE_DIR / "data" / "processed"
 
 
 def render_incident_details(incident):
-    st.subheader(f"{incident['incident_id']}: {incident['title']}")
+    title = incident.get('title', incident.get('description', 'No description')[:50])
+    st.subheader(f"{incident['incident_id']}: {title}")
 
     col_a, col_b = st.columns([1, 2])
 
     with col_a:
         st.markdown("**Description**")
-        st.info(incident['description'])
+        st.info(incident.get('description', 'No description available'))
 
         st.markdown("**Metadata**")
         st.json({
-            "Date": incident['date'],
-            "Location": incident['location'],
-            "Potential Severity": incident['potential_severity']
+            "Date": incident.get('date', 'Unknown'),
+            "Location": incident.get('location') or 'Unknown',
+            "Severity": incident.get('severity') or incident.get('potential_severity') or 'Unknown'
         })
 
     with col_b:
@@ -35,12 +36,15 @@ def render_incident_details(incident):
             c2.metric("Mitigation", f"{cov['mitigation_coverage']:.1%}")
 
             # Gaps
-            gaps = incident['analytics']['gaps']
+            gaps = incident['analytics'].get('gaps', [])
             if gaps:
                 st.warning(f"⚠️ {len(gaps)} Barrier Gaps Detected")
                 for gap in gaps:
-                    with st.expander(f"{gap['type'].title()}: {gap['missing_barrier_id']}"):
-                        st.write(f"**Description:** {gap['description']}")
+                    gap_id = gap.get('missing_barrier_id') or gap.get('id', 'Unknown')
+                    gap_name = gap.get('name', gap_id)
+                    gap_type = gap.get('type', 'unknown').title()
+                    with st.expander(f"{gap_type}: {gap_name}"):
+                        st.write(f"**Description:** {gap.get('description', 'No description')}")
             else:
                 st.success("✅ No Barrier Gaps Detected")
 
@@ -71,10 +75,17 @@ def main():
         return
 
     # Selection
+    def format_incident(incident_id):
+        for i in incidents:
+            if i['incident_id'] == incident_id:
+                title = i.get('title', i.get('description', '')[:40])
+                return f"{incident_id} - {title}"
+        return incident_id
+
     selected_id = st.selectbox(
         "Select Incident",
         options=[i['incident_id'] for i in incidents],
-        format_func=lambda x: next((f"{i['incident_id']} - {i['title']}" for i in incidents if i['incident_id'] == x), x)
+        format_func=format_incident
     )
 
     selected_incident = next((i for i in incidents if i['incident_id'] == selected_id), None)
