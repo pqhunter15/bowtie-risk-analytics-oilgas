@@ -46,8 +46,8 @@ class TestExtractStructured:
             assert rows[0].extracted is True
             assert rows[0].incident_id == "test-001"
 
-            # Check JSON was written
-            json_path = out_dir / "test-001.json"
+            # Check JSON was written under provider subdir
+            json_path = out_dir / "stub" / "test-001.json"
             assert json_path.exists()
             data = json.loads(json_path.read_text())
             assert data["incident_id"] == "test-001"
@@ -122,7 +122,7 @@ class TestManifestPersistence:
         loaded = load_structured_manifest(Path("/tmp/does_not_exist.csv"))
         assert loaded == []
 
-    def test_merge_upserts_by_incident_id(self):
+    def test_merge_upserts_by_composite_key(self):
         old_row = self._make_row("INC-001")
         updated_row = self._make_row("INC-001")
         updated_row.valid = False
@@ -136,6 +136,39 @@ class TestManifestPersistence:
         assert by_id["INC-001"].valid is False  # new wins
         assert by_id["INC-001"].validation_errors == "some error"
         assert by_id["INC-002"].extracted is True
+
+    def test_merge_preserves_different_providers_same_incident(self):
+        """Same incident_id with different providers must coexist."""
+        openai_row = self._make_row("INC-001")
+        openai_row.provider = "openai"
+        openai_row.model = "gpt-4o"
+        openai_row.output_json_path = "out/openai/INC-001.json"
+
+        anthropic_row = self._make_row("INC-001")
+        anthropic_row.provider = "anthropic"
+        anthropic_row.model = "claude-sonnet-4-5-20250929"
+        anthropic_row.output_json_path = "out/anthropic/INC-001.json"
+
+        merged = merge_structured_manifests([openai_row], [anthropic_row])
+
+        assert len(merged) == 2
+        providers = {r.provider for r in merged}
+        assert providers == {"openai", "anthropic"}
+
+    def test_output_json_path_includes_provider(self):
+        """extract_structured must write JSON under out_dir/<provider>/."""
+        provider = StubProvider()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            text_dir = Path(tmpdir) / "text"
+            out_dir = Path(tmpdir) / "out"
+            text_dir.mkdir()
+            (text_dir / "INC-042.txt").write_text("Some narrative.")
+
+            rows = extract_structured(text_dir, out_dir, provider, "stub")
+
+            assert len(rows) == 1
+            assert "/stub/" in rows[0].output_json_path or "\\stub\\" in rows[0].output_json_path
+            assert (out_dir / "stub" / "INC-042.json").exists()
 
     def test_extraction_preserves_prior_manifest_rows(self):
         """Regression: running extraction must not drop prior manifest rows."""
@@ -167,3 +200,23 @@ class TestManifestPersistence:
             assert "PRIOR-001" in ids, "Prior row was dropped!"
             assert "NEW-001" in ids, "New row was not added!"
             assert len(final) == 2
+
+    def test_raw_response_path_per_provider(self):
+        """raw_response_path must contain /raw/<provider>/ with correct separators."""
+        provider = StubProvider()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            text_dir = Path(tmpdir) / "text"
+            out_dir = Path(tmpdir) / "out"
+            text_dir.mkdir()
+            (text_dir / "INC-099.txt").write_text("Some narrative.")
+
+            for pname in ("stub", "anthropic", "openai"):
+                rows = extract_structured(text_dir, out_dir, provider, pname)
+                assert len(rows) == 1
+                rp = rows[0].raw_response_path
+                assert rp is not None
+                # Path must contain /raw/<provider>/ (or backslash on Windows)
+                assert f"raw/{pname}/" in rp.replace("\\", "/"), (
+                    f"Expected 'raw/{pname}/' in {rp}"
+                )
+                assert Path(rp).exists()

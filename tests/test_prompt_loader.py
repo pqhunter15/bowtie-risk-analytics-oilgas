@@ -77,3 +77,15 @@ def test_prompt_contains_enum_constraints() -> None:
     assert "`prevention`, `mitigation`" in result
     # Anti-synonym instruction
     assert "Do not invent new categories" in result
+
+
+def test_prompt_contains_required_fields_section() -> None:
+    """Assembled prompt must include required fields for hazards/threats/consequences."""
+    result = load_prompt("Some incident text.")
+    assert "Required Fields" in result
+    assert "hazard_id" in result
+    assert "threat_id" in result
+    assert "consequence_id" in result
+    assert "H-001" in result
+    assert "T-001" in result
+    assert "CON-001" in result

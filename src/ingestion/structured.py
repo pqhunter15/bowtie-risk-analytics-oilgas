@@ -61,17 +61,22 @@ def load_structured_manifest(path: Path) -> list[StructuredManifestRow]:
     return rows
 
 
+def _manifest_key(row: StructuredManifestRow) -> tuple[str, str]:
+    """Composite key for manifest upsert: (incident_id, provider)."""
+    return (row.incident_id, row.provider)
+
+
 def merge_structured_manifests(
     existing: list[StructuredManifestRow],
     new: list[StructuredManifestRow],
 ) -> list[StructuredManifestRow]:
-    """Merge manifest rows, upserting by incident_id (new wins)."""
-    by_id: dict[str, StructuredManifestRow] = {}
+    """Merge manifest rows, upserting by (incident_id, provider). New wins."""
+    by_key: dict[tuple[str, str], StructuredManifestRow] = {}
     for row in existing:
-        by_id[row.incident_id] = row
+        by_key[_manifest_key(row)] = row
     for row in new:
-        by_id[row.incident_id] = row
-    return list(by_id.values())
+        by_key[_manifest_key(row)] = row
+    return list(by_key.values())
 
 
 def save_structured_manifest(rows: list[StructuredManifestRow], path: Path) -> None:
@@ -169,7 +174,8 @@ def extract_structured(
     Returns:
         List of manifest rows tracking extraction results.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
+    provider_out_dir = out_dir / provider_name
+    provider_out_dir.mkdir(parents=True, exist_ok=True)
     rows: list[StructuredManifestRow] = []
 
     txt_files = sorted(text_dir.glob("*.txt"))
@@ -182,7 +188,7 @@ def extract_structured(
     processed = 0
     for txt_path in txt_files:
         incident_id = txt_path.stem
-        json_path = out_dir / f"{incident_id}.json"
+        json_path = provider_out_dir / f"{incident_id}.json"
 
         # Resume: skip already-extracted files
         if resume and json_path.exists():

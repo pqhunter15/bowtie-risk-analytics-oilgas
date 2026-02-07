@@ -58,6 +58,25 @@ class TestGeminiProviderInit:
         assert isinstance(provider, LLMProvider)
         assert provider.model == "gemini-2.0-flash"
 
+    def test_model_prefix_stripped(self):
+        """models/gemini-2.0-flash should be normalized to gemini-2.0-flash."""
+        p1 = GeminiProvider(api_key="AIza-test", model="models/gemini-2.0-flash")
+        p2 = GeminiProvider(api_key="AIza-test", model="gemini-2.0-flash")
+        assert p1.model == "gemini-2.0-flash"
+        assert p2.model == "gemini-2.0-flash"
+
+    @patch("src.llm.gemini_provider.requests.post")
+    def test_model_prefix_url_correct(self, mock_post: MagicMock) -> None:
+        """Both forms must produce the same URL without double 'models/'."""
+        mock_post.return_value = _mock_response(200, _generate_content_payload('{}'))
+
+        for model_arg in ("gemini-2.0-flash", "models/gemini-2.0-flash"):
+            provider = GeminiProvider(api_key="AIza-test", model=model_arg)
+            provider.extract("prompt")
+            url = mock_post.call_args.args[0]
+            assert "models/gemini-2.0-flash:generateContent" in url
+            assert "models/models/" not in url
+
 
 # -- extract() ---------------------------------------------------------------
 

@@ -41,7 +41,9 @@ class GeminiProvider(LLMProvider):
             raise RuntimeError(
                 "GeminiProvider requires GEMINI_API_KEY env var but it is not set."
             )
-        self.model = model or _DEFAULT_MODEL
+        raw_model = model or _DEFAULT_MODEL
+        # Strip "models/" prefix if present — the URL already includes it
+        self.model = raw_model.removeprefix("models/")
         self.max_output_tokens = max_output_tokens
         self.temperature = temperature
         self.timeout = timeout
