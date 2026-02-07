@@ -61,3 +61,6 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 docs/plans/
+
+# Data artifacts (keep local)
+/data/
