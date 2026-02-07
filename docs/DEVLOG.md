@@ -49,3 +49,45 @@ Validation:
 - `pytest -q` passes.
 - CLI smoke tests: `python -m src.pipeline --help`, `python -m src.pipeline acquire --help`, acquisition + download + extract-text run end-to-end.
 
+## 2026-02-07 — Multi-provider LLM Extraction Pipeline
+
+Implemented a provider registry and HTTP-based LLM providers for structured incident extraction.
+
+### Environment Variables
+
+| Variable | Provider | Required when |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI (gpt-4o, etc.) | `--provider openai` |
+| `ANTHROPIC_API_KEY` | Anthropic (Claude) | `--provider anthropic` |
+| `GEMINI_API_KEY` | Google Gemini | `--provider gemini` |
+| *(none)* | Stub (testing) | `--provider stub` (default) |
+
+### Bakeoff Commands (3 incidents)
+
+```bash
+# Stub (no key needed — for testing)
+python -m src.pipeline extract-structured --provider stub --limit 3
+
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+python -m src.pipeline extract-structured --provider openai --model gpt-4o --limit 3
+
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+python -m src.pipeline extract-structured --provider anthropic --model claude-sonnet-4-5-20250929 --limit 3
+
+# Gemini
+export GEMINI_API_KEY="AIza..."
+python -m src.pipeline extract-structured --provider gemini --model gemini-2.0-flash --limit 3
+```
+
+### Output Locations
+
+| Artifact | Path |
+|---|---|
+| Structured JSON | `data/structured/incidents/<incident_id>.json` |
+| Raw LLM response | `data/structured/raw/<provider>/<incident_id>.txt` |
+| Extraction manifest | `data/structured/structured_manifest.csv` |
+
+Use `--resume` to skip already-extracted incidents on re-runs. The manifest is upserted by `incident_id`, so prior rows are preserved across runs.
+

@@ -51,8 +51,13 @@ def get_provider(name: str, model: Optional[str] = None, **kwargs: Any) -> LLMPr
         from src.llm.openai_provider import OpenAIProvider
         return OpenAIProvider(api_key=api_key, model=model, **kwargs)
 
-    # Placeholder for anthropic / gemini
-    raise NotImplementedError(
-        f"Provider {name!r} is registered but not yet implemented. "
-        f"Set {env_var} and implement src/llm/{name}.py."
-    )
+    if name == "anthropic":
+        from src.llm.anthropic_provider import AnthropicProvider
+        return AnthropicProvider(api_key=api_key, model=model, **kwargs)
+
+    if name == "gemini":
+        from src.llm.gemini_provider import GeminiProvider
+        return GeminiProvider(api_key=api_key, model=model, **kwargs)
+
+    # Should be unreachable given SUPPORTED_PROVIDERS check above
+    raise ValueError(f"Unknown provider: {name!r}")
