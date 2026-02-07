@@ -1,6 +1,6 @@
 """Provider registry: resolve provider name to LLMProvider instance."""
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from src.llm.base import LLMProvider
 
@@ -13,12 +13,14 @@ _ENV_KEY_MAP = {
 }
 
 
-def get_provider(name: str, model: Optional[str] = None) -> LLMProvider:
+def get_provider(name: str, model: Optional[str] = None, **kwargs: Any) -> LLMProvider:
     """Return an LLMProvider instance for *name*.
 
     Args:
         name: One of ``stub``, ``openai``, ``anthropic``, ``gemini``.
         model: Model identifier passed to non-stub providers (ignored by stub).
+        **kwargs: Extra keyword arguments forwarded to the provider constructor
+            (e.g. ``max_output_tokens``, ``temperature``, ``timeout``, ``retries``).
 
     Returns:
         An instantiated :class:`LLMProvider`.
@@ -45,7 +47,11 @@ def get_provider(name: str, model: Optional[str] = None) -> LLMProvider:
             f"Provider {name!r} requires env var {env_var} but it is not set."
         )
 
-    # Placeholder – real SDK wrappers will be added later
+    if name == "openai":
+        from src.llm.openai_provider import OpenAIProvider
+        return OpenAIProvider(api_key=api_key, model=model, **kwargs)
+
+    # Placeholder for anthropic / gemini
     raise NotImplementedError(
         f"Provider {name!r} is registered but not yet implemented. "
         f"Set {env_var} and implement src/llm/{name}.py."

@@ -207,7 +207,14 @@ def cmd_extract_structured(args: argparse.Namespace) -> None:
 
     # Select provider via registry
     from src.llm.registry import get_provider
-    provider = get_provider(args.provider, model=args.model)
+    provider = get_provider(
+        args.provider,
+        model=args.model,
+        max_output_tokens=args.max_output_tokens,
+        temperature=args.temperature,
+        timeout=args.timeout,
+        retries=args.retries,
+    )
 
     rows = extract_structured(
         text_dir,
