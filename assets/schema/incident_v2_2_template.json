@@ -1,0 +1,100 @@
+{
+  "incident_id": "unknown",
+  "source": {
+    "doc_type": "unknown",
+    "url": null,
+    "title": "unknown",
+    "date_published": null,
+    "date_occurred": null,
+    "timezone": null
+  },
+  "context": {
+    "region": "unknown",
+    "operator": "unknown",
+    "operating_phase": "unknown",
+    "materials": []
+  },
+  "event": {
+    "top_event": "unknown",
+    "incident_type": "unknown",
+    "costs": null,
+    "actions_taken": [],
+    "summary": "",
+    "recommendations": [],
+    "key_phrases": []
+  },
+  "bowtie": {
+    "hazards": [],
+    "threats": [],
+    "consequences": [],
+    "controls": [
+      {
+        "control_id": "C-001",
+        "name": "unknown",
+        "side": "prevention",
+        "barrier_role": "unknown",
+        "barrier_type": "unknown",
+        "line_of_defense": "unknown",
+        "lod_basis": null,
+        "linked_threat_ids": [],
+        "linked_consequence_ids": [],
+        "performance": {
+          "barrier_status": "unknown",
+          "barrier_failed": false,
+          "detection_applicable": false,
+          "detection_mentioned": false,
+          "alarm_applicable": false,
+          "alarm_mentioned": false,
+          "manual_intervention_applicable": false,
+          "manual_intervention_mentioned": false
+        },
+        "human": {
+          "human_contribution_value": null,
+          "human_contribution_mentioned": false,
+          "barrier_failed_human": false,
+          "linked_pif_ids": []
+        },
+        "evidence": {
+          "supporting_text": [],
+          "confidence": "low"
+        }
+      }
+    ]
+  },
+  "pifs": {
+    "people": {
+      "competence_value": null,
+      "competence_mentioned": false,
+      "fatigue_value": null,
+      "fatigue_mentioned": false,
+      "communication_value": null,
+      "communication_mentioned": false,
+      "situational_awareness_value": null,
+      "situational_awareness_mentioned": false
+    },
+    "work": {
+      "procedures_value": null,
+      "procedures_mentioned": false,
+      "workload_value": null,
+      "workload_mentioned": false,
+      "time_pressure_value": null,
+      "time_pressure_mentioned": false,
+      "tools_equipment_value": null,
+      "tools_equipment_mentioned": false
+    },
+    "organisation": {
+      "safety_culture_value": null,
+      "safety_culture_mentioned": false,
+      "management_of_change_value": null,
+      "management_of_change_mentioned": false,
+      "supervision_value": null,
+      "supervision_mentioned": false,
+      "training_value": null,
+      "training_mentioned": false
+    }
+  },
+  "notes": {
+    "rules": "JSON output only. mentioned fields must be evidence-based. Use null for unknown values.",
+    "schema_version": "2.2"
+  }
+}

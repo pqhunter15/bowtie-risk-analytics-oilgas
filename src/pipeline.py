@@ -20,6 +20,7 @@ from src.models.incident import Incident
 from src.models.bowtie import Bowtie
 from src.analytics.engine import calculate_barrier_coverage, identify_gaps
 from src.analytics.aggregation import calculate_fleet_metrics
+from src.ingestion.structured import extract_structured, save_structured_manifest
 
 # Configure logging
 logging.basicConfig(
@@ -198,6 +199,30 @@ def cmd_process(args: argparse.Namespace) -> None:
     process_raw_files(raw_dir, processed_dir, bowtie_path)
 
 
+def cmd_extract_structured(args: argparse.Namespace) -> None:
+    """Extract structured V2.2 JSON from text files using LLM."""
+    text_dir = Path(args.text_dir)
+    out_dir = Path(args.out_dir)
+    manifest_path = Path(args.manifest)
+
+    # Select provider
+    provider_name = args.provider
+    if provider_name == "stub":
+        from src.llm.stub import StubProvider
+        provider = StubProvider()
+    else:
+        raise ValueError(f"Unknown provider: {provider_name}. Available: stub")
+
+    rows = extract_structured(text_dir, out_dir, provider, provider_name)
+
+    save_structured_manifest(rows, manifest_path)
+    logger.info(f"Saved {len(rows)} structured extraction results to {manifest_path}")
+
+    extracted = sum(1 for r in rows if r.extracted)
+    valid = sum(1 for r in rows if r.valid)
+    logger.info(f"Extracted: {extracted}/{len(rows)}, Valid: {valid}/{len(rows)}")
+
+
 def main():
     """Main entry point with CLI argument parsing."""
     parser = argparse.ArgumentParser(
@@ -250,6 +275,33 @@ def main():
     # process subcommand (original behavior)
     p_process = subparsers.add_parser("process", help="Run analytics pipeline")
     p_process.set_defaults(func=cmd_process)
+
+    # extract-structured subcommand
+    p_struct = subparsers.add_parser(
+        "extract-structured", help="Extract structured V2.2 JSON from text using LLM"
+    )
+    p_struct.add_argument(
+        "--text-dir",
+        default="data/interim/text",
+        help="Directory containing extracted text files",
+    )
+    p_struct.add_argument(
+        "--out-dir",
+        default="data/structured/incidents",
+        help="Output directory for structured JSON",
+    )
+    p_struct.add_argument(
+        "--manifest",
+        default="data/structured/structured_manifest.csv",
+        help="Output manifest path",
+    )
+    p_struct.add_argument(
+        "--provider",
+        default="stub",
+        choices=["stub"],
+        help="LLM provider to use",
+    )
+    p_struct.set_defaults(func=cmd_extract_structured)
 
     args = parser.parse_args()
 
