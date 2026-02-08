@@ -4,7 +4,9 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from src.ingestion.structured import (
+    compute_quality_gate,
     extract_structured,
+    generate_run_report,
     load_structured_manifest,
     merge_structured_manifests,
     save_structured_manifest,
@@ -220,3 +222,163 @@ class TestManifestPersistence:
                     f"Expected 'raw/{pname}/' in {rp}"
                 )
                 assert Path(rp).exists()
+
+
+class TestParseRetryOnFailure:
+    """JSON parse retry re-prompts the provider once on failure."""
+
+    def test_retry_on_bad_json_then_good(self):
+        """Provider returns prose first, then valid JSON on retry prompt."""
+        call_count = 0
+        prompts_received: list[str] = []
+
+        class RetryProvider:
+            def extract(self, prompt: str) -> str:
+                nonlocal call_count
+                call_count += 1
+                prompts_received.append(prompt)
+                if call_count == 1:
+                    return "Here is the analysis:\nNot JSON at all"
+                return '{"incident_id": "X", "source": {}, "context": {}, "event": {}, "bowtie": {"hazards": [{"hazard_id": "H-001", "description": "x"}], "threats": [{"threat_id": "T-001", "description": "x"}], "consequences": [{"consequence_id": "CON-001", "description": "x"}], "controls": []}, "controls": [], "pifs": {}}'
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            text_dir = Path(tmpdir) / "text"
+            out_dir = Path(tmpdir) / "out"
+            text_dir.mkdir()
+            (text_dir / "retry-test.txt").write_text("Some incident text.")
+
+            rows = extract_structured(text_dir, out_dir, RetryProvider(), "test")
+
+            assert len(rows) == 1
+            assert rows[0].extracted is True
+            assert call_count == 2  # original + retry
+            # Retry must contain the full schema prompt, not just a snippet
+            assert "SCHEMA_TEMPLATE" not in prompts_received[1]  # template already resolved
+            assert "Incident Text" in prompts_received[1] or "incident" in prompts_received[1].lower()
+            assert "CRITICAL" in prompts_received[1]  # strict suffix
+
+
+class TestRunReport:
+    def _make_row(self, incident_id: str, valid: bool = True,
+                  validation_errors: str | None = None,
+                  error: str | None = None,
+                  extracted: bool = True) -> StructuredManifestRow:
+        return StructuredManifestRow(
+            incident_id=incident_id,
+            source_text_path=f"text/{incident_id}.txt",
+            output_json_path=f"out/{incident_id}.json",
+            provider="stub",
+            extracted=extracted,
+            valid=valid,
+            validation_errors=validation_errors,
+            error=error,
+        )
+
+    def test_report_counts(self):
+        rows = [
+            self._make_row("A", valid=True),
+            self._make_row("B", valid=False, validation_errors="event -> costs: Input should be a valid string"),
+            self._make_row("C", valid=False, validation_errors="JSON parse error: Expecting value"),
+            self._make_row("D", valid=False, extracted=False, error="Timeout"),
+        ]
+        report = generate_run_report(rows, "stub", "test-model")
+
+        assert report["total"] == 4
+        assert report["extracted"] == 3
+        assert report["valid"] == 1
+        assert report["invalid"] == 2
+        assert report["parse_failed"] == 1
+        assert report["errored"] == 1
+        assert report["provider"] == "stub"
+        assert report["model"] == "test-model"
+        assert 0 < report["valid_rate"] < 1
+        assert len(report["top_validation_errors"]) == 2
+
+    def test_empty_rows(self):
+        report = generate_run_report([], "stub")
+        assert report["total"] == 0
+        assert report["valid_rate"] == 0.0
+
+
+class TestModelDumpWritePath:
+    """Extracted JSON files must contain all schema sections with defaults."""
+
+    def test_output_has_all_sections(self):
+        provider = StubProvider()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            text_dir = Path(tmpdir) / "text"
+            out_dir = Path(tmpdir) / "out"
+            text_dir.mkdir()
+            (text_dir / "full-001.txt").write_text("An incident occurred at a refinery.")
+
+            rows = extract_structured(text_dir, out_dir, provider, "stub")
+            assert len(rows) == 1
+            assert rows[0].valid is True
+
+            data = json.loads((out_dir / "stub" / "full-001.json").read_text())
+            # All top-level sections must be present
+            for key in ("incident_id", "source", "context", "event", "bowtie", "pifs", "notes"):
+                assert key in data, f"Missing top-level key: {key}"
+
+            # pifs must have all three sub-sections with defaults
+            assert "people" in data["pifs"]
+            assert "work" in data["pifs"]
+            assert "organisation" in data["pifs"]
+
+            # bowtie must have all four sub-sections
+            for key in ("hazards", "threats", "consequences", "controls"):
+                assert key in data["bowtie"], f"Missing bowtie key: {key}"
+
+            # event must have summary field
+            assert "summary" in data["event"]
+
+            # notes must have schema_version
+            assert data["notes"]["schema_version"] == "2.2"
+
+
+class TestQualityGate:
+    def test_quality_gate_computes_metrics(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            d = Path(tmpdir)
+            # Write a complete incident JSON
+            complete = {
+                "incident_id": "INC-1",
+                "source": {},
+                "context": {},
+                "event": {"summary": "A fire broke out."},
+                "bowtie": {
+                    "hazards": [{"hazard_id": "H-001", "name": "fire"}],
+                    "threats": [{"threat_id": "T-001", "name": "ignition"}],
+                    "consequences": [{"consequence_id": "CON-001", "name": "injury"}],
+                    "controls": [{"control_id": "C-001", "name": "alarm"}],
+                },
+                "pifs": {
+                    "people": {"competence_mentioned": True},
+                    "work": {},
+                    "organisation": {},
+                },
+            }
+            (d / "inc1.json").write_text(json.dumps(complete))
+
+            # Write a minimal incident JSON (missing most)
+            minimal = {"incident_id": "INC-2", "source": {}, "context": {}, "event": {}}
+            (d / "inc2.json").write_text(json.dumps(minimal))
+
+            gate = compute_quality_gate(d)
+
+            assert gate["total"] == 2
+            assert gate["has_controls"] == 1
+            assert gate["has_summary"] == 1
+            assert gate["has_pifs"] == 1
+            assert gate["has_hazards"] == 1
+            assert gate["has_controls_pct"] == 50.0
+            # Controls count distribution
+            assert gate["controls_count_min"] == 0
+            assert gate["controls_count_max"] == 1
+            assert gate["controls_count_p50"] >= 0
+            assert gate["controls_count_p90"] >= 0
+
+    def test_quality_gate_empty_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gate = compute_quality_gate(Path(tmpdir))
+            assert gate["total"] == 0

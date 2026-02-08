@@ -36,6 +36,21 @@ You are an expert oil & gas incident analyst specialising in Bowtie risk methodo
   - Use IDs like `CON-001`, `CON-002`, etc. If the text does not assign IDs, generate them.
   - If the consequence name is not explicit, create a short descriptive name based on the incident.
 
+## Key Name Constraints
+
+- Use the EXACT key names from the schema above. Do NOT rename keys.
+- `event.top_event` (not `event.type`), `event.summary` (not `event.description`)
+- `event.incident_type` (not `event.category`)
+- Include ALL top-level sections: `source`, `context`, `event`, `bowtie`, `pifs`, `notes`
+- `bowtie.controls` must be inside the `bowtie` object, not at the top level
+
+## Field Type Constraints (MUST follow exactly)
+
+- `event.top_event` MUST be a single string (e.g. `"Loss of Containment"`). Never return a list or object.
+- `context.operating_phase` MUST be a single string (e.g. `"production"`). Never return a list or object.
+- `context.materials` MUST be an array of strings, even if only one item (e.g. `["crude oil"]`). Never return a bare string.
+- Use `null` when a value is unknown or not mentioned in the text.
+
 ## Enum Constraints (MUST follow exactly)
 
 - `bowtie.controls[*].side` must be exactly one of: `prevention`, `mitigation`

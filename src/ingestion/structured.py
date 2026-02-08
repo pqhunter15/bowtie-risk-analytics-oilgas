@@ -5,11 +5,13 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from collections import Counter
+from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
 
 from src.llm.base import LLMProvider
+from src.models.incident_v2_2 import IncidentV2_2
 from src.prompts.loader import load_prompt
 from src.validation.incident_validator import validate_incident_v2_2
 
@@ -178,9 +180,10 @@ def extract_structured(
     provider_out_dir.mkdir(parents=True, exist_ok=True)
     rows: list[StructuredManifestRow] = []
 
-    txt_files = sorted(text_dir.glob("*.txt"))
+    # Scan directory and all subdirectories for .txt files
+    txt_files = sorted(text_dir.rglob("*.txt"))
     if not txt_files:
-        logger.warning(f"No .txt files found in {text_dir}")
+        logger.warning(f"No .txt files found in {text_dir} (checked subdirs too)")
         return rows
 
     logger.info(f"Processing {len(txt_files)} text files with provider={provider_name}")
@@ -226,10 +229,35 @@ def extract_structured(
             )
             row.raw_response_path = str(raw_path)
 
-            # Parse JSON from response
-            try:
-                payload = _parse_llm_json(raw_response)
-            except json.JSONDecodeError as parse_err:
+            # Parse JSON from response (with one retry on parse failure)
+            payload = None
+            parse_err = None
+            for _parse_attempt in range(2):
+                try:
+                    payload = _parse_llm_json(raw_response)
+                    break
+                except json.JSONDecodeError as e:
+                    parse_err = e
+                    if _parse_attempt == 0:
+                        logger.warning(
+                            f"{incident_id}: JSON parse failed, retrying with full prompt"
+                        )
+                        _STRICT_SUFFIX = (
+                            "\n\nCRITICAL: Return ONLY a single valid JSON object. "
+                            "No prose, no markdown fences, no explanation."
+                        )
+                        try:
+                            raw_response = provider.extract(prompt + _STRICT_SUFFIX)
+                            # Save updated raw response
+                            raw_path = _save_raw_response(
+                                raw_response, provider_name, incident_id,
+                                out_dir.parent,
+                            )
+                            row.raw_response_path = str(raw_path)
+                        except Exception:
+                            break  # retry failed, fall through
+
+            if payload is None:
                 # Write error JSON preserving identifiers
                 error_payload = {
                     "incident_id": incident_id,
@@ -260,11 +288,21 @@ def extract_structured(
             if not is_valid:
                 row.validation_errors = "; ".join(errors[:5])  # Cap at 5 errors
                 logger.warning(f"{incident_id}: validation failed: {errors[:3]}")
-                # Attach errors into payload for downstream visibility
                 payload["_validation_errors"] = errors
 
-            # Write JSON regardless (for debugging)
-            json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            # Round-trip through model to fill in all defaults/missing sections
+            try:
+                model = IncidentV2_2.model_validate(payload)
+                out_payload = model.model_dump(mode="json")
+            except Exception:
+                # If model_validate fails, fall back to raw payload
+                out_payload = payload
+
+            # Preserve validation errors in output for debugging
+            if "_validation_errors" in payload:
+                out_payload["_validation_errors"] = payload["_validation_errors"]
+
+            json_path.write_text(json.dumps(out_payload, indent=2), encoding="utf-8")
             logger.info(f"{incident_id}: extracted (valid={is_valid})")
 
         except Exception as e:
@@ -275,3 +313,138 @@ def extract_structured(
         processed += 1
 
     return rows
+
+
+def generate_run_report(
+    rows: list[StructuredManifestRow],
+    provider_name: str,
+    model_name: Optional[str] = None,
+) -> dict[str, Any]:
+    """Build a summary report dict from extraction manifest rows.
+
+    Returns:
+        Dict with totals, valid/invalid/parse_failed counts,
+        and top validation error prefixes.
+    """
+    total = len(rows)
+    extracted = sum(1 for r in rows if r.extracted)
+    valid = sum(1 for r in rows if r.valid)
+    invalid = sum(1 for r in rows if r.extracted and not r.valid)
+    parse_failed = sum(
+        1 for r in rows
+        if r.validation_errors and r.validation_errors.startswith("JSON parse error")
+    )
+    errored = sum(1 for r in rows if r.error and not r.extracted)
+
+    # Top validation errors by message prefix (first 60 chars)
+    error_counter: Counter[str] = Counter()
+    for r in rows:
+        if r.validation_errors:
+            for msg in r.validation_errors.split("; "):
+                prefix = msg[:60]
+                error_counter[prefix] += 1
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "provider": provider_name,
+        "model": model_name,
+        "total": total,
+        "extracted": extracted,
+        "valid": valid,
+        "invalid": invalid,
+        "parse_failed": parse_failed,
+        "errored": errored,
+        "valid_rate": round(valid / total, 3) if total else 0.0,
+        "top_validation_errors": [
+            {"message": msg, "count": cnt}
+            for msg, cnt in error_counter.most_common(10)
+        ],
+    }
+
+
+def compute_quality_gate(incident_dir: Path) -> dict[str, Any]:
+    """Compute quality metrics over extracted incident JSON files.
+
+    Returns:
+        Dict with counts, percentages, and controls_count distribution
+        (min, p50, p90, max).
+    """
+    json_files = sorted(incident_dir.glob("*.json"))
+    total = len(json_files)
+    if total == 0:
+        return {"total": 0}
+
+    has_controls = 0
+    has_summary = 0
+    has_pifs = 0
+    has_hazards = 0
+    has_threats = 0
+    has_consequences = 0
+    controls_counts: list[int] = []
+
+    for jp in json_files:
+        try:
+            data = json.loads(jp.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        bt = data.get("bowtie", {})
+        n_controls = len(bt.get("controls", []))
+        controls_counts.append(n_controls)
+        if n_controls > 0:
+            has_controls += 1
+        if bt.get("hazards"):
+            has_hazards += 1
+        if bt.get("threats"):
+            has_threats += 1
+        if bt.get("consequences"):
+            has_consequences += 1
+
+        ev = data.get("event", {})
+        if ev.get("summary"):
+            has_summary += 1
+
+        pifs = data.get("pifs", {})
+        # pifs present if any *_mentioned field is True
+        if not isinstance(pifs, dict):
+            pifs_present = False
+        else:
+            pifs_present = any(
+                v for cat in pifs.values() if isinstance(cat, dict)
+                for k, v in cat.items() if k.endswith("_mentioned")
+            )
+        if pifs_present:
+            has_pifs += 1
+
+    def _pct(n: int) -> float:
+        return round(n / total * 100, 1)
+
+    def _percentile(data: list[int], pct: float) -> float:
+        """Compute percentile without numpy."""
+        if not data:
+            return 0.0
+        s = sorted(data)
+        k = (len(s) - 1) * pct / 100.0
+        f = int(k)
+        c = f + 1 if f + 1 < len(s) else f
+        return s[f] + (k - f) * (s[c] - s[f])
+
+    return {
+        "total": total,
+        "has_controls": has_controls,
+        "has_controls_pct": _pct(has_controls),
+        "has_summary": has_summary,
+        "has_summary_pct": _pct(has_summary),
+        "has_pifs": has_pifs,
+        "has_pifs_pct": _pct(has_pifs),
+        "has_hazards": has_hazards,
+        "has_hazards_pct": _pct(has_hazards),
+        "has_threats": has_threats,
+        "has_threats_pct": _pct(has_threats),
+        "has_consequences": has_consequences,
+        "has_consequences_pct": _pct(has_consequences),
+        "controls_count_min": min(controls_counts) if controls_counts else 0,
+        "controls_count_p50": round(_percentile(controls_counts, 50), 1),
+        "controls_count_p90": round(_percentile(controls_counts, 90), 1),
+        "controls_count_max": max(controls_counts) if controls_counts else 0,
+    }

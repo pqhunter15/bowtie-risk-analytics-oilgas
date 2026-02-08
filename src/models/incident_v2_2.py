@@ -1,8 +1,8 @@
 """Pydantic v2 models for Incident Schema V2.2."""
 
-from typing import Literal, Optional
+from typing import Any, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +46,35 @@ class ContextInfo(BaseModel):
         default_factory=list, description="Materials involved"
     )
 
+    @field_validator("operating_phase", mode="before")
+    @classmethod
+    def _stringify_operating_phase(cls, v: Any) -> str:
+        if v is None:
+            return "unknown"
+        if isinstance(v, str):
+            return v.lower().strip()
+        if isinstance(v, list):
+            return "; ".join(str(x) for x in v).lower()
+        if isinstance(v, dict):
+            import json as _json
+            return _json.dumps(v)
+        return str(v).lower()
+
+    @field_validator("materials", mode="before")
+    @classmethod
+    def _coerce_materials(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, dict):
+            # LLM returned object like {"type": "crude oil", ...} — extract non-null string values
+            vals = [str(x) for x in v.values() if x is not None and str(x).strip()]
+            return vals if vals else []
+        if isinstance(v, str):
+            return [v]
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        return [str(v)]
+
 
 # ---------------------------------------------------------------------------
 # Event
@@ -58,7 +87,53 @@ class EventInfo(BaseModel):
 
     top_event: str = Field(default="unknown", description="Top event classification")
     incident_type: str = Field(default="unknown", description="Incident type")
-    costs: Optional[str] = Field(default=None, description="Estimated costs")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_keys(cls, data: Any) -> Any:
+        """Remap common LLM key-drift to canonical schema names."""
+        if not isinstance(data, dict):
+            return data
+        # event.type -> event.top_event
+        if "type" in data and "top_event" not in data:
+            data["top_event"] = data.pop("type")
+        # event.description -> event.summary
+        if "description" in data and "summary" not in data:
+            data["summary"] = data.pop("description")
+        # event.category -> event.incident_type
+        if "category" in data and "incident_type" not in data:
+            data["incident_type"] = data.pop("category")
+        return data
+    costs: Optional[Union[str, int, float]] = Field(
+        default=None, description="Estimated costs"
+    )
+
+    @field_validator("top_event", mode="before")
+    @classmethod
+    def _stringify_top_event(cls, v: Any) -> str:
+        if v is None:
+            return "unknown"
+        if isinstance(v, str):
+            return v
+        if isinstance(v, list):
+            return "; ".join(str(x) for x in v)
+        if isinstance(v, dict):
+            import json as _json
+            return _json.dumps(v)
+        return str(v)
+
+    @field_validator("costs", mode="before")
+    @classmethod
+    def _normalize_costs(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, dict):
+            # Empty dict from LLM means "unknown"
+            if not v:
+                return None
+            import json as _json
+            return _json.dumps(v)
+        return str(v)
     actions_taken: list[str] = Field(
         default_factory=list, description="Actions taken during/after the event"
     )
@@ -332,3 +407,17 @@ class IncidentV2_2(BaseModel):
     bowtie: BowtieV2 = Field(default_factory=BowtieV2)
     pifs: PifsInfo = Field(default_factory=PifsInfo)
     notes: NotesInfo = Field(default_factory=NotesInfo)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remap_top_level(cls, data: Any) -> Any:
+        """Move misplaced top-level controls into bowtie.controls."""
+        if not isinstance(data, dict):
+            return data
+        if "controls" in data and "bowtie" in data:
+            bt = data["bowtie"]
+            if isinstance(bt, dict) and not bt.get("controls"):
+                bt["controls"] = data.pop("controls")
+        elif "controls" in data and "bowtie" not in data:
+            data["bowtie"] = {"controls": data.pop("controls")}
+        return data
