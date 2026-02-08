@@ -53,14 +53,12 @@ CLAUDE.md
 # Secrets
 .env
 .env.*
+!.env.example
 secrets/
 
-# Data
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
+# Data artifacts (never commit — reproduce via pipeline)
+/data/
 docs/plans/
 
-# Data artifacts (keep local)
-/data/
+# Misc junk
+=1.0.0

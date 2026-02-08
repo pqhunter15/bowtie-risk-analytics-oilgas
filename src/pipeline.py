@@ -22,6 +22,7 @@ from src.analytics.engine import calculate_barrier_coverage, identify_gaps
 from src.analytics.aggregation import calculate_fleet_metrics
 from src.ingestion.structured import (
     extract_structured,
+    generate_run_report,
     load_structured_manifest,
     merge_structured_manifests,
     save_structured_manifest,
@@ -242,9 +243,40 @@ def cmd_extract_structured(args: argparse.Namespace) -> None:
     valid = sum(1 for r in rows if r.valid)
     logger.info(f"Extracted: {extracted}/{len(rows)}, Valid: {valid}/{len(rows)}")
 
+    # Write run report
+    if rows:
+        report = generate_run_report(rows, args.provider, args.model)
+        report_dir = Path(args.out_dir).parent / "run_reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        ts = report["generated_at"].replace(":", "-").replace("+", "")
+        report_path = report_dir / f"{args.provider}_{ts}.json"
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info(f"Run report: {report_path} "
+                     f"(valid_rate={report['valid_rate']:.1%})")
+
+
+def cmd_quality_gate(args: argparse.Namespace) -> None:
+    """Run quality gate metrics on structured extraction results."""
+    from src.ingestion.structured import compute_quality_gate
+    incident_dir = Path(args.incident_dir)
+    if not incident_dir.exists():
+        logger.error(f"Incident directory not found: {incident_dir}")
+        return
+    gate = compute_quality_gate(incident_dir)
+    print(json.dumps(gate, indent=2))
+    logger.info(f"Quality gate: {gate.get('total', 0)} incidents, "
+                f"{gate.get('has_controls_pct', 0)}% with controls, "
+                f"{gate.get('has_summary_pct', 0)}% with summary")
+
 
 def main():
     """Main entry point with CLI argument parsing."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
     parser = argparse.ArgumentParser(
         prog="python -m src.pipeline", description="Bowtie Risk Analytics pipeline"
     )
@@ -302,8 +334,8 @@ def main():
     )
     p_struct.add_argument(
         "--text-dir",
-        default="data/interim/text",
-        help="Directory containing extracted text files",
+        default="data/raw",
+        help="Directory containing extracted text files (scans subdirs)",
     )
     p_struct.add_argument(
         "--out-dir",
@@ -343,6 +375,17 @@ def main():
         "--resume", action="store_true", help="Skip files with existing output JSON"
     )
     p_struct.set_defaults(func=cmd_extract_structured)
+
+    # quality-gate subcommand
+    p_qg = subparsers.add_parser(
+        "quality-gate", help="Report quality metrics on structured extractions"
+    )
+    p_qg.add_argument(
+        "--incident-dir",
+        default="data/structured/incidents/anthropic",
+        help="Directory with extracted JSON files",
+    )
+    p_qg.set_defaults(func=cmd_quality_gate)
 
     args = parser.parse_args()
 

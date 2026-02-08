@@ -104,6 +104,7 @@ class TestGeminiProviderExtract:
         body = call_args.kwargs.get("json") or call_args[1].get("json")
         assert body["contents"][0]["parts"][0]["text"] == "some prompt"
         assert body["generationConfig"]["maxOutputTokens"] == 4096
+        assert body["generationConfig"]["responseMimeType"] == "application/json"
 
     @patch("src.llm.gemini_provider.requests.post")
     def test_non_retryable_error_raises_immediately(self, mock_post: MagicMock) -> None:

@@ -32,8 +32,7 @@ def _parse_csb_date(date_str: str) -> Optional[str]:
     if not date_str:
         return None
     try:
-        # Try common formats
-        for fmt in ["%B %d, %Y", "%b %d, %Y", "%Y-%m-%d"]:
+        for fmt in ["%B %d, %Y", "%b %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]:
             try:
                 dt = datetime.strptime(date_str.strip(), fmt)
                 return dt.strftime("%Y-%m-%d")
@@ -42,6 +41,81 @@ def _parse_csb_date(date_str: str) -> Optional[str]:
         return None
     except Exception:
         return None
+
+
+# Slugs that appear in root-level hrefs but are NOT investigation detail pages.
+_SLUG_DENYLIST = frozenset({
+    "investigations",
+    "completed-investigations",
+    "current-investigations",
+    "data-quality",
+    "data-quality-",
+    "about",
+    "recommendations",
+    "videos",
+    "news",
+})
+
+
+def _extract_investigation_cards(html: str) -> list[tuple[str, str]]:
+    """Return ``(href_path, title)`` pairs for investigation cards.
+
+    Live CSB listing pages include a "full investigation details" CTA link
+    inside each card.  We locate each CTA occurrence and search a window
+    before it for root-level ``<a href="/<slug>/">`` links that are *not*
+    under ``/investigations/``.
+
+    Falls back to ``<h3>``-based matching for alternative markup / tests.
+
+    A deny-list filters out remaining non-incident slugs.
+    """
+    cta_pattern = re.compile(r"full\s+investigation\s+details", re.IGNORECASE)
+    cta_positions = [m.start() for m in cta_pattern.finditer(html)]
+
+    href_pattern = re.compile(r'href="(/[^"/]+/)"', re.IGNORECASE)
+    seen: set[str] = set()
+    results: list[tuple[str, str]] = []
+
+    if cta_positions:
+        # CTA-based extraction: look in a 2000-char window before each CTA
+        for pos in cta_positions:
+            window_start = max(0, pos - 2000)
+            window = html[window_start:pos]
+
+            for m in href_pattern.finditer(window):
+                path = m.group(1)
+                slug = path.strip("/")
+
+                if slug.startswith("investigations"):
+                    continue
+                if len(slug) < 3:
+                    continue
+                if slug in _SLUG_DENYLIST:
+                    continue
+                if slug in seen:
+                    continue
+                seen.add(slug)
+
+                title = slug.replace("-", " ").strip("- ").title()
+                results.append((path, title))
+    else:
+        # Fallback: <h3>-based extraction (tests, alternative markup)
+        h3_pattern = re.compile(
+            r'<a\s[^>]*href="(/[^"/]+/)"[^>]*>.*?<h3[^>]*>(.*?)</h3>',
+            re.DOTALL | re.IGNORECASE,
+        )
+        for m in h3_pattern.finditer(html):
+            path = m.group(1)
+            title = m.group(2).strip()
+            slug = path.strip("/")
+            if slug in _SLUG_DENYLIST:
+                continue
+            if slug in seen:
+                continue
+            seen.add(slug)
+            results.append((path, title))
+
+    return results
 
 
 def discover_csb_incidents(limit: int = 20) -> Iterator[IncidentManifestRow]:
@@ -57,6 +131,8 @@ def discover_csb_incidents(limit: int = 20) -> Iterator[IncidentManifestRow]:
     session = requests.Session()
     session.headers["User-Agent"] = USER_AGENT
 
+    pdf_pattern = r'href="([^"]+\.pdf)"'
+    seen_ids: set[str] = set()
     count = 0
     page = 1
 
@@ -70,33 +146,26 @@ def discover_csb_incidents(limit: int = 20) -> Iterator[IncidentManifestRow]:
                 logger.warning(f"CSB page {page} returned {resp.status_code}")
                 break
 
-            # Simple regex-based parsing (avoid BeautifulSoup dependency)
-            # Look for investigation links and PDF links
             html = resp.text
+            investigations = _extract_investigation_cards(html)
 
-            # Find investigation entries
-            # Pattern: links to /investigations/detail/... and nearby PDF links
-            investigation_pattern = r'href="(/investigations/[^"]+/)"[^>]*>([^<]+)</a>'
-            pdf_pattern = r'href="([^"]+\.pdf)"'
-
-            investigations = re.findall(investigation_pattern, html, re.IGNORECASE)
-            pdfs = re.findall(pdf_pattern, html, re.IGNORECASE)
-
-            if not investigations and not pdfs:
+            if not investigations:
                 logger.info(f"No more investigations found on page {page}")
                 break
 
-            # Match investigations with PDFs (simplified approach)
             for detail_path, title in investigations:
                 if count >= limit:
                     break
 
-                title = title.strip()
-                detail_url = urljoin(CSB_BASE_URL, detail_path)
+                # Derive incident_id from the URL slug (stable, unique)
+                incident_id = detail_path.strip("/")
 
-                # Try to find a PDF for this investigation
-                # Look for PDF link that might be associated
-                incident_id = _slugify(title) or f"csb-{count + 1}"
+                # Deduplicate across pages
+                if incident_id in seen_ids:
+                    continue
+                seen_ids.add(incident_id)
+
+                detail_url = urljoin(CSB_BASE_URL, detail_path)
 
                 # Fetch detail page to get PDF link
                 try:
@@ -118,8 +187,14 @@ def discover_csb_incidents(limit: int = 20) -> Iterator[IncidentManifestRow]:
                         if pdf_url:
                             # Extract date if available
                             date_match = re.search(
-                                r"(\w+ \d{1,2}, \d{4})", detail_resp.text
+                                r"Final Report Released On:\s*</strong>\s*(\d{2}/\d{2}/\d{4})",
+                                detail_resp.text,
                             )
+                            if not date_match:
+                                # Fallback to any date pattern
+                                date_match = re.search(
+                                    r"(\w+ \d{1,2}, \d{4})", detail_resp.text
+                                )
                             date_occurred = (
                                 _parse_csb_date(date_match.group(1))
                                 if date_match

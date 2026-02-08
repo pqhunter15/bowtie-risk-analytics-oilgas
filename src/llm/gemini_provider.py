@@ -64,6 +64,7 @@ class GeminiProvider(LLMProvider):
             "generationConfig": {
                 "maxOutputTokens": self.max_output_tokens,
                 "temperature": self.temperature,
+                "responseMimeType": "application/json",
             },
         }
 
