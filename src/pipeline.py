@@ -2,6 +2,14 @@ import argparse
 import json
 import logging
 from pathlib import Path
+
+def get_sources_root() -> Path:
+    """Prefer tracked configs/sources; fall back to local data/sources."""
+    cfg = Path("configs/sources")
+    return cfg if cfg.exists() else Path("data/sources")
+
+
+
 from typing import List, Optional
 
 import requests
@@ -20,6 +28,7 @@ from src.models.incident import Incident
 from src.models.bowtie import Bowtie
 from src.analytics.engine import calculate_barrier_coverage, identify_gaps
 from src.analytics.aggregation import calculate_fleet_metrics
+from src.analytics.build_combined_exports import build_all as build_combined_all
 from src.ingestion.structured import (
     extract_structured,
     generate_run_report,
@@ -44,6 +53,16 @@ from src.ingestion.sources.phmsa_discover import (
     write_url_list as phmsa_write_url_list,
     write_metadata as phmsa_write_metadata,
 )
+from src.ingestion.sources.phmsa_ingest import ingest_phmsa_csv
+from src.ingestion.sources.tsb_discover import (
+    discover_tsb,
+    write_url_list as tsb_write_url_list,
+    write_metadata as tsb_write_metadata,
+)
+from src.corpus.manifest import build_manifest, write_manifest, CORPUS_V1_ROOT
+from src.corpus.clean import move_noise_jsons
+from src.corpus.extract import run_corpus_extraction
+from src.ingestion.normalize import normalize_v23_payload
 
 # Configure logging
 logging.basicConfig(
@@ -272,127 +291,8 @@ def cmd_extract_structured(args: argparse.Namespace) -> None:
                      f"(valid_rate={report['valid_rate']:.1%})")
 
 
-def _normalize_v23_payload(payload: dict) -> dict[str, int]:
-    """Apply in-memory coercions to make a payload conform to Schema v2.3.
-
-    Returns a counter dict of coercions applied.
-    """
-    from collections import Counter
-
-    counts: Counter[str] = Counter()
-
-    # 1) event.incident_type -> str
-    event = payload.get("event")
-    if isinstance(event, dict):
-        it = event.get("incident_type")
-        if isinstance(it, list):
-            event["incident_type"] = it[0] if len(it) == 1 else "; ".join(str(x) for x in it)
-            counts["incident_type_list_to_str"] += 1
-        elif it is None or (isinstance(it, str) and not it.strip()):
-            event["incident_type"] = "unknown"
-            counts["incident_type_empty_to_unknown"] += 1
-        elif not isinstance(it, str):
-            event["incident_type"] = str(it)
-            counts["incident_type_to_str"] += 1
-
-    # 2-5) bowtie.controls[]
-    SIDE_MAP = {
-        "left": "prevention", "prevention": "prevention", "prevent": "prevention",
-        "right": "mitigation", "mitigation": "mitigation", "mitigate": "mitigation",
-    }
-    LOD_INT_MAP = {1: "1st", 2: "2nd", 3: "3rd", 4: "recovery"}
-    LOD_ALLOWED = {"1st", "2nd", "3rd", "recovery", "unknown"}
-    BS_ALLOWED = {"active", "degraded", "failed", "bypassed", "not_installed", "unknown"}
-    BS_SYNONYM: dict[str, str] = {
-        "ok": "active", "effective": "active", "in_place": "active",
-        "in place": "active", "installed": "active", "worked": "active",
-        "partial": "degraded", "weak": "degraded",
-        "broken": "failed",
-        "not installed": "not_installed", "not_installed": "not_installed",
-        "missing": "not_installed",
-        "none": "unknown", "na": "unknown", "n-a": "unknown", "n/a": "unknown",
-    }
-
-    # Remap generic 'id' keys to typed ID fields in bowtie sub-lists
-    bowtie = payload.get("bowtie", {})
-    for item in bowtie.get("hazards", []):
-        if "id" in item and "hazard_id" not in item:
-            item["hazard_id"] = item.pop("id")
-            counts["hazard_id_remapped"] += 1
-    for item in bowtie.get("threats", []):
-        if "id" in item and "threat_id" not in item:
-            item["threat_id"] = item.pop("id")
-            counts["threat_id_remapped"] += 1
-    for item in bowtie.get("consequences", []):
-        if "id" in item and "consequence_id" not in item:
-            item["consequence_id"] = item.pop("id")
-            counts["consequence_id_remapped"] += 1
-
-    controls = payload.get("bowtie", {}).get("controls", [])
-    for ctrl in controls:
-        # side
-        raw_side = str(ctrl.get("side", "")).strip().lower()
-        mapped_side = SIDE_MAP.get(raw_side)
-        if mapped_side:
-            if ctrl.get("side") != mapped_side:
-                counts["side_mapped"] += 1
-            ctrl["side"] = mapped_side
-        else:
-            ctrl["side"] = "prevention"
-            counts["side_default_prevention"] += 1
-
-        # line_of_defense
-        raw_lod = ctrl.get("line_of_defense")
-        if isinstance(raw_lod, int):
-            ctrl["line_of_defense"] = LOD_INT_MAP.get(raw_lod, "unknown")
-            counts["lod_int_to_enum"] += 1
-        elif isinstance(raw_lod, str):
-            stripped = raw_lod.strip()
-            if stripped.isdigit():
-                ctrl["line_of_defense"] = LOD_INT_MAP.get(int(stripped), "unknown")
-                counts["lod_strnum_to_enum"] += 1
-            elif stripped not in LOD_ALLOWED:
-                ctrl["line_of_defense"] = "unknown"
-                counts["lod_unknown"] += 1
-        else:
-            ctrl["line_of_defense"] = "unknown"
-            counts["lod_missing"] += 1
-
-        # performance.barrier_status
-        perf = ctrl.get("performance")
-        if isinstance(perf, dict):
-            raw_bs = perf.get("barrier_status")
-            if isinstance(raw_bs, str):
-                bs_lower = raw_bs.strip().lower()
-                if bs_lower in BS_ALLOWED:
-                    perf["barrier_status"] = bs_lower
-                elif bs_lower in BS_SYNONYM:
-                    perf["barrier_status"] = BS_SYNONYM[bs_lower]
-                    counts["barrier_status_mapped"] += 1
-                else:
-                    perf["barrier_status"] = "unknown"
-                    counts["barrier_status_unknown"] += 1
-            else:
-                perf["barrier_status"] = "unknown"
-                counts["barrier_status_missing"] += 1
-
-        # human.human_contribution_value
-        human = ctrl.get("human")
-        if isinstance(human, dict):
-            hcv = human.get("human_contribution_value")
-            if hcv is None:
-                human["human_contribution_value"] = "unknown"
-                counts["human_value_none_to_unknown"] += 1
-            elif isinstance(hcv, list):
-                human["human_contribution_value"] = (
-                    hcv[0] if len(hcv) == 1 else "; ".join(str(x) for x in hcv)
-                )
-                counts["human_value_list_to_str"] += 1
-            elif not isinstance(hcv, str):
-                human["human_contribution_value"] = str(hcv)
-                counts["human_value_to_str"] += 1
-
-    return dict(counts)
+# Alias so cmd_convert_schema can call it by the historical private name.
+_normalize_v23_payload = normalize_v23_payload
 
 
 def cmd_convert_schema(args: argparse.Namespace) -> None:
@@ -436,7 +336,7 @@ def cmd_convert_schema(args: argparse.Namespace) -> None:
 
 def cmd_schema_check(args: argparse.Namespace) -> None:
     """Validate extracted JSON files against Schema v2.3."""
-    from src.validation.incident_validator import validate_incident_v2_2
+    from src.validation.incident_validator import validate_incident_v23
 
     incident_dir = Path(args.incident_dir)
     if not incident_dir.exists():
@@ -456,7 +356,7 @@ def cmd_schema_check(args: argparse.Namespace) -> None:
             invalid_files.append((json_path, [f"JSON decode error: {exc}"]))
             continue
 
-        is_valid, errors = validate_incident_v2_2(payload)
+        is_valid, errors = validate_incident_v23(payload)
         if not is_valid:
             invalid_files.append((json_path, errors))
 
@@ -495,10 +395,35 @@ def cmd_extract_qc(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_ingest_phmsa(args: argparse.Namespace) -> None:
+    """Ingest PHMSA bulk CSV (skeleton: header inspection only)."""
+    rows = ingest_phmsa_csv(
+        csv_path=Path(args.csv_path),
+        output_dir=Path(args.output_dir),
+        manifest_path=Path(args.manifest),
+        limit=args.limit,
+    )
+    logger.info(f"PHMSA ingest: {len(rows)} rows mapped")
+
+
+def cmd_build_combined_exports(args: argparse.Namespace) -> None:
+    """Build combined flat incidents and controls CSVs from all sources."""
+    incidents_dir = Path(args.incidents_dir)
+    output_dir = Path(args.output_dir)
+
+    incident_count, control_count = build_combined_all(incidents_dir, output_dir)
+    logger.info(
+        f"Combined exports complete: {incident_count} incidents → "
+        f"{output_dir / 'flat_incidents_combined.csv'}; "
+        f"{control_count} controls → {output_dir / 'controls_combined.csv'}"
+    )
+
+
 _DISCOVER_ADAPTERS: dict[str, tuple] = {
     "csb": (discover_csb, csb_write_url_list, csb_write_metadata),
     "bsee": (discover_bsee, bsee_write_url_list, bsee_write_metadata),
     "phmsa": (discover_phmsa, phmsa_write_url_list, phmsa_write_metadata),
+    "tsb": (discover_tsb, tsb_write_url_list, tsb_write_metadata),
 }
 
 
@@ -514,7 +439,9 @@ def cmd_discover_source(args: argparse.Namespace) -> None:
 
     discover_fn, write_urls_fn, write_meta_fn = _DISCOVER_ADAPTERS[source]
 
-    out_path = Path(args.out) if args.out else Path(f"data/sources/{source}/url_list.csv")
+    out_path = Path(args.out) if args.out else (get_sources_root() / source / "url_list.csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     base_url = args.base_url
     kwargs: dict = {"timeout": args.timeout, "sleep": args.sleep}
     if base_url:
@@ -556,6 +483,75 @@ def cmd_ingest_source(args: argparse.Namespace) -> None:
     )
     ok = sum(1 for r in rows if r.status == "ok")
     logger.info(f"Ingestion complete: {ok}/{len(rows)} ok")
+
+
+def cmd_corpus_manifest(args: argparse.Namespace) -> None:
+    """Build or refresh corpus_v1_manifest.csv."""
+    rows = build_manifest()
+    out  = CORPUS_V1_ROOT / "manifests" / "corpus_v1_manifest.csv"
+    write_manifest(rows, out)
+    ready   = sum(1 for r in rows if r["extraction_status"] == "ready")
+    pending = sum(1 for r in rows if r["extraction_status"] == "needs_extraction")
+    logger.info(f"Manifest written → {out}  ({ready} ready, {pending} needs_extraction)")
+
+
+def cmd_corpus_clean(args: argparse.Namespace) -> None:
+    """Quarantine noise JSONs (no matching PDF) into structured_json_noise/."""
+    moved = move_noise_jsons(dry_run=args.dry_run)
+    action = "Would move" if args.dry_run else "Moved"
+    for name in moved:
+        logger.info(f"  {action}: {name}")
+    logger.info(f"{action} {len(moved)} noise JSON(s).")
+
+
+def cmd_corpus_extract(args: argparse.Namespace) -> None:
+    """Extract missing corpus_v1 JSONs using Claude (Anthropic)."""
+    from src.llm.anthropic_provider import AnthropicProvider
+
+    corpus_root   = Path("data/corpus_v1")
+    manifest_path = corpus_root / "manifests" / "corpus_v1_manifest.csv"
+    structured    = corpus_root / "structured_json"
+
+    if not manifest_path.exists():
+        logger.error(
+            f"Manifest not found: {manifest_path}  Run corpus-manifest first."
+        )
+        return
+
+    # Primary: Haiku (cheap), 8192 output tokens, 300 s timeout
+    primary = AnthropicProvider(
+        model=args.model,
+        max_output_tokens=8192,
+        timeout=300,
+        retries=3,
+    )
+    # Escalated: same model, 16000 output tokens (for complex JSON responses)
+    escalated = AnthropicProvider(
+        model=args.model,
+        max_output_tokens=16000,
+        timeout=300,
+        retries=2,
+    )
+    # Fallback: Sonnet (only if haiku fails completely)
+    fallback = AnthropicProvider(
+        model=args.fallback_model,
+        max_output_tokens=16000,
+        timeout=300,
+        retries=2,
+    )
+
+    run_corpus_extraction(
+        manifest_path=manifest_path,
+        structured_dir=structured,
+        text_search_dirs=None,
+        provider=primary,
+        delay_seconds=args.delay,
+        text_limit=args.text_limit,
+        primary_retries=3,
+        escalated_provider=escalated,
+        fallback_provider=fallback,
+    )
+    logger.info("Run corpus-manifest to refresh extraction_status.")
 
 
 def main():
@@ -768,6 +764,56 @@ def main():
     )
     p_ingest.set_defaults(func=cmd_ingest_source)
 
+    # ingest-phmsa subcommand
+    p_phmsa = subparsers.add_parser(
+        "ingest-phmsa",
+        help="Ingest PHMSA bulk CSV (skeleton: header inspection only)",
+    )
+    p_phmsa.add_argument(
+        "--csv-path", required=True, help="Path to PHMSA bulk incident CSV"
+    )
+    p_phmsa.add_argument(
+        "--output-dir",
+        default="data/structured/incidents/phmsa",
+        help="Output directory for V2.3 JSON files",
+    )
+    p_phmsa.add_argument(
+        "--manifest",
+        default="data/manifests/structured_manifest_phmsa.csv",
+        help="Path for structured manifest CSV",
+    )
+    p_phmsa.add_argument(
+        "--limit", type=int, default=None, help="Max rows to process"
+    )
+    p_phmsa.set_defaults(func=cmd_ingest_phmsa)
+
+    # build-combined-exports subcommand
+    p_bce = subparsers.add_parser(
+        "build-combined-exports",
+        help="Build flat_incidents_combined.csv and controls_combined.csv across all sources",
+        description=(
+            "Scans all JSON files under --incidents-dir (recursively) and produces:\n"
+            "  flat_incidents_combined.csv  — one row per incident\n"
+            "  controls_combined.csv        — one row per control\n"
+            "Both files are written to --output-dir."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_bce.add_argument(
+        "--incidents-dir",
+        default="data/structured/incidents",
+        help="Root directory containing incident JSON files (searched recursively)",
+    )
+    p_bce.add_argument(
+        "--output-dir",
+        default="data/processed",
+        help=(
+            "Output directory for combined CSVs "
+            "(flat_incidents_combined.csv, controls_combined.csv)"
+        ),
+    )
+    p_bce.set_defaults(func=cmd_build_combined_exports)
+
     # discover-source subcommand
     p_discover = subparsers.add_parser(
         "discover-source",
@@ -776,13 +822,13 @@ def main():
     p_discover.add_argument(
         "--source",
         required=True,
-        choices=["csb", "bsee", "phmsa"],
-        help="Source to discover (csb, bsee, phmsa)",
+        choices=["csb", "bsee", "phmsa", "tsb"],
+        help="Source to discover (csb, bsee, phmsa, tsb)",
     )
     p_discover.add_argument(
         "--out",
         default=None,
-        help="Output url_list CSV path (default: data/sources/<source>/url_list.csv)",
+        help="Output url_list CSV path (default: configs/sources/<source>/url_list.csv; falls back to data/sources/...)",
     )
     p_discover.add_argument(
         "--limit",
@@ -809,6 +855,52 @@ def main():
     )
     p_discover.set_defaults(func=cmd_discover_source)
 
+    p_cm = subparsers.add_parser(
+        "corpus-manifest",
+        help="Build/refresh data/corpus_v1/manifests/corpus_v1_manifest.csv",
+    )
+    p_cm.set_defaults(func=cmd_corpus_manifest)
+
+    p_cc = subparsers.add_parser(
+        "corpus-clean",
+        help="Move no-match JSONs from structured_json/ to structured_json_noise/",
+    )
+    p_cc.add_argument(
+        "--dry-run", action="store_true",
+        help="Print what would be moved without moving anything",
+    )
+    p_cc.set_defaults(func=cmd_corpus_clean)
+
+    p_ce = subparsers.add_parser(
+        "corpus-extract",
+        help="Extract missing corpus_v1 JSONs using Claude (requires ANTHROPIC_API_KEY)",
+    )
+    p_ce.add_argument(
+        "--model",
+        default="claude-haiku-4-5-20251001",
+        help="Primary Anthropic model ID (default: claude-haiku-4-5-20251001)",
+    )
+    p_ce.add_argument(
+        "--fallback-model",
+        default="claude-sonnet-4-6",
+        dest="fallback_model",
+        help="Fallback model when primary fails (default: claude-sonnet-4-6)",
+    )
+    p_ce.add_argument(
+        "--delay",
+        type=float,
+        default=30.0,
+        help="Minimum seconds between API calls (default: 30.0)",
+    )
+    p_ce.add_argument(
+        "--text-limit",
+        type=int,
+        default=50_000,
+        dest="text_limit",
+        help="Truncate incident text to this many chars before sending (default: 50000, 0=no limit)",
+    )
+    p_ce.set_defaults(func=cmd_corpus_extract)
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -820,3 +912,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def get_sources_root() -> Path:
+    """Prefer tracked configs/ sources; fall back to local data/ sources."""
+    cfg = Path("configs/sources")
+    return cfg if cfg.exists() else get_sources_root()
