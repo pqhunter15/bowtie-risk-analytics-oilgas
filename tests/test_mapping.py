@@ -45,7 +45,7 @@ def test_mapping_config_loads_successfully(mapping: MappingConfig) -> None:
 
 def test_barrier_type_display_administrative(mapping: MappingConfig) -> None:
     """get_barrier_type_display('administrative') returns display name."""
-    assert mapping.get_barrier_type_display("administrative") == "Administrative / Procedural Barrier"
+    assert mapping.get_barrier_type_display("administrative") == "Active Human Barrier"
 
 
 def test_barrier_type_display_unknown_value(mapping: MappingConfig) -> None:
