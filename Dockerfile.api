@@ -1,0 +1,53 @@
+# Bowtie Risk Analytics — API Dockerfile
+# python:3.12-slim required: torch wheel is cp312 only
+FROM python:3.12-slim
+
+# --- System dependencies ---
+# curl: HEALTHCHECK; gcc/g++: numba/llvmlite compile; git: huggingface_hub
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        gcc \
+        g++ \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# --- Install torch from pre-downloaded CPU wheel (cp312, ~182MB) ---
+# Must install before requirements-api.txt so sentence-transformers finds it.
+COPY docker-deps/wheels/torch-2.11.0+cpu-cp312-cp312-manylinux_2_28_x86_64.whl /tmp/
+RUN pip install --no-cache-dir /tmp/torch-2.11.0+cpu-cp312-cp312-manylinux_2_28_x86_64.whl \
+    && rm /tmp/torch-2.11.0+cpu-cp312-cp312-manylinux_2_28_x86_64.whl
+
+# --- Install API runtime dependencies ---
+COPY requirements-api.txt /tmp/requirements-api.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-api.txt
+
+# --- Pre-download sentence-transformers model (all-mpnet-base-v2, ~420MB) ---
+# Baked into the image so containers start without internet access.
+ENV HF_HOME=/app/.cache/huggingface
+RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-mpnet-base-v2')"
+
+# --- Copy application source ---
+COPY src/ /app/src/
+COPY configs/ /app/configs/
+# corpus_builder.py imports from scripts.association_mining at module load time
+COPY scripts/association_mining/ /app/scripts/association_mining/
+RUN touch /app/scripts/__init__.py /app/scripts/association_mining/__init__.py
+
+# --- Copy runtime data artifacts (gitignored but needed at startup) ---
+# ML model artifacts: xgb_model*.json, logreg_*.joblib, shap_background_*.npy, etc.
+COPY data/models/artifacts/ /app/data/models/artifacts/
+# RAG workspace: FAISS indexes + corpus CSVs
+COPY data/evaluation/rag_workspace/ /app/data/evaluation/rag_workspace/
+
+# --- Runtime configuration ---
+# Port
+EXPOSE 8000
+
+# Health check — curl /health every 30s, 3 retries, 60s startup grace
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start API server
+CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

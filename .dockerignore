@@ -1,0 +1,70 @@
+# --- Version control & IDE ---
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+*.pyc
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# --- Python virtualenv ---
+venv/
+.venv/
+env/
+.env/
+
+# --- Node / frontend ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+
+# --- Large data directories (NOT needed in API image) ---
+data/raw/
+data/structured/
+data/processed/
+data/corpus_v1/
+
+# --- Explicitly ALLOW these gitignored dirs (needed at runtime) ---
+# data/models/artifacts/ — ML model files (xgb_model*.json, logreg_*.joblib, etc.)
+# data/evaluation/rag_workspace/ — FAISS indexes + corpus CSVs for RAG
+!data/models/
+!data/models/artifacts/
+!data/models/artifacts/**
+!data/evaluation/
+!data/evaluation/rag_workspace/
+!data/evaluation/rag_workspace/**
+
+# --- Test / dev artifacts ---
+tests/
+out/
+# scripts/ is excluded EXCEPT association_mining (imported by corpus_builder.py)
+scripts/
+!scripts/
+!scripts/association_mining/
+!scripts/association_mining/**
+*.log
+*.tmp
+
+# --- Documentation / planning ---
+docs/
+*.md
+!README.md
+
+# --- GSD project management ---
+.gsd/
+
+# --- Frontend source (built separately) ---
+frontend/
+
+# --- Notebooks ---
+*.ipynb
+notebooks/
+
+# --- OS artifacts ---
+.DS_Store
+Thumbs.db
