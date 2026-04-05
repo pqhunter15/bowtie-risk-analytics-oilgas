@@ -1,0 +1,696 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface Threat {
+  id: string
+  name: string
+  contribution: 'high' | 'medium' | 'low'
+}
+
+interface Consequence {
+  id: string
+  name: string
+}
+
+interface BarrierInput {
+  id: string
+  name: string
+  side: 'prevention' | 'mitigation'
+  barrier_type: string
+  barrier_role?: string
+  line_of_defense?: string
+  risk_level?: 'Low' | 'Medium' | 'High' | null
+  threatId?: string
+  consequenceId?: string
+}
+
+export interface BowtieSVGProps {
+  topEvent: string
+  threats: Threat[]
+  consequences: Consequence[]
+  barriers: BarrierInput[]
+  selectedBarrierId: string | null
+  onBarrierClick: (barrierId: string) => void
+}
+
+// ---------------------------------------------------------------------------
+// Constants (BowTieXP visual spec)
+// ---------------------------------------------------------------------------
+
+const THREAT_X = 30
+const THREAT_W = 200
+const THREAT_H = 115
+const BARRIER_START_X = 340
+const BARRIER_W = 180
+const BARRIER_H = 78
+const BARRIER_GAP_X = 30
+const TOP_EVENT_CX = 700
+const TOP_EVENT_R = 80
+const MIT_START_X = TOP_EVENT_CX + TOP_EVENT_R + 100 // 880
+const CONSEQUENCE_X = 1150
+const CONSEQUENCE_W = 200
+const CONSEQUENCE_H = 90
+const HAZARD_W = 170
+const HAZARD_H = 72
+
+const BLUE = '#0000EE'
+const DARK_BLUE = '#0000CC'
+const LINE_COLOR = '#AAA'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function wrapText(text: string, maxChars: number): string[] {
+  const words = text.split(' ')
+  const lines: string[] = []
+  let cur = ''
+  for (const w of words) {
+    if (cur && (cur + ' ' + w).length > maxChars) {
+      lines.push(cur)
+      cur = w
+    } else {
+      cur = cur ? cur + ' ' + w : w
+    }
+  }
+  if (cur) lines.push(cur)
+  return lines
+}
+
+function typeInfo(t: string): { color: string; label: string } {
+  switch (t) {
+    case 'engineering':
+      return { color: '#3B82F6', label: 'A-HW Active hardware' }
+    case 'administrative':
+      return { color: '#8B5CF6', label: 'ST Socio technical' }
+    case 'ppe':
+      return { color: '#EC4899', label: 'BEH Behavioural' }
+    default:
+      return { color: '#94A3B8', label: t }
+  }
+}
+
+function contribInfo(c: 'high' | 'medium' | 'low') {
+  switch (c) {
+    case 'high':
+      return { color: '#DC2626', label: 'HC High contribution' }
+    case 'medium':
+      return { color: '#F59E0B', label: 'MC Medium contribution' }
+    case 'low':
+      return { color: '#F59E0B', label: 'LC Low contribution' }
+  }
+}
+
+function riskColor(level: string | null | undefined): string {
+  switch (level) {
+    case 'High':
+      return '#EF4444'
+    case 'Medium':
+      return '#F59E0B'
+    case 'Low':
+      return '#22C55E'
+    default:
+      return '#94A3B8'
+  }
+}
+
+/** Cubic bezier S-curve from (x1,y1) to (x2,y2) */
+function sCurve(x1: number, y1: number, x2: number, y2: number): string {
+  const dx = x2 - x1
+  return `M ${x1} ${y1} C ${x1 + dx * 0.4} ${y1}, ${x1 + dx * 0.6} ${y2}, ${x2} ${y2}`
+}
+
+// ---------------------------------------------------------------------------
+// Layout computation
+// ---------------------------------------------------------------------------
+
+interface PositionedThreat extends Threat {
+  x: number
+  y: number
+  cy: number
+}
+interface PositionedConsequence extends Consequence {
+  x: number
+  y: number
+  cy: number
+}
+interface PositionedBarrier extends BarrierInput {
+  x: number
+  y: number
+  cy: number
+}
+
+function computeLayout(
+  threats: Threat[],
+  consequences: Consequence[],
+  barriers: BarrierInput[],
+) {
+  const rows = Math.max(threats.length, consequences.length, 1)
+  const H = rows * 200 + 100
+  const CY = H / 2
+
+  // Vertical distribution for a set of boxes
+  function spreadY(count: number, boxH: number): number[] {
+    if (count <= 0) return []
+    if (count === 1) return [CY - boxH / 2]
+    const totalSpace = H - 160
+    const slot = totalSpace / count
+    return Array.from({ length: count }, (_, i) => 80 + i * slot + (slot - boxH) / 2)
+  }
+
+  const tPos: PositionedThreat[] = threats.map((t, i) => {
+    const ys = spreadY(threats.length, THREAT_H)
+    return { ...t, x: THREAT_X, y: ys[i], cy: ys[i] + THREAT_H / 2 }
+  })
+
+  const cPos: PositionedConsequence[] = consequences.map((c, i) => {
+    const ys = spreadY(consequences.length, CONSEQUENCE_H)
+    return { ...c, x: CONSEQUENCE_X, y: ys[i], cy: ys[i] + CONSEQUENCE_H / 2 }
+  })
+
+  // Group prevention barriers by threat (round-robin if no threatId)
+  const prev = barriers.filter((b) => b.side === 'prevention')
+  const mit = barriers.filter((b) => b.side === 'mitigation')
+
+  const prevByThreat = new Map<string, BarrierInput[]>()
+  for (const t of threats) prevByThreat.set(t.id, [])
+
+  for (const b of prev) {
+    if (b.threatId && prevByThreat.has(b.threatId)) {
+      prevByThreat.get(b.threatId)!.push(b)
+    } else if (threats.length > 0) {
+      // Find threat with fewest barriers
+      let minId = threats[0].id
+      let minN = Infinity
+      for (const [id, bs] of prevByThreat) {
+        if (bs.length < minN) {
+          minN = bs.length
+          minId = id
+        }
+      }
+      prevByThreat.get(minId)!.push(b)
+    }
+  }
+
+  // Position prevention barriers along each pathway
+  const bPos: PositionedBarrier[] = []
+
+  for (const tp of tPos) {
+    const bs = prevByThreat.get(tp.id) ?? []
+    const n = bs.length
+    for (let j = 0; j < n; j++) {
+      const bx = BARRIER_START_X + j * (BARRIER_W + BARRIER_GAP_X)
+      const t = (j + 1) / (n + 1)
+      const by = tp.cy + t * (CY - tp.cy) - BARRIER_H / 2
+      bPos.push({ ...bs[j], x: bx, y: by, cy: by + BARRIER_H / 2 })
+    }
+  }
+
+  // Position mitigation barriers on center line
+  for (let j = 0; j < mit.length; j++) {
+    const bx = MIT_START_X + j * (BARRIER_W + BARRIER_GAP_X)
+    bPos.push({ ...mit[j], x: bx, y: CY - BARRIER_H / 2, cy: CY })
+  }
+
+  return { H, CY, tPos, cPos, bPos, prevByThreat, mit }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function BowtieSVG({
+  topEvent,
+  threats,
+  consequences,
+  barriers,
+  selectedBarrierId,
+  onBarrierClick,
+}: BowtieSVGProps) {
+  const [zoom, setZoom] = useState(1)
+
+  const layout = useMemo(
+    () => computeLayout(threats, consequences, barriers),
+    [threats, consequences, barriers],
+  )
+
+  const { H, CY, tPos, cPos, bPos, prevByThreat, mit } = layout
+
+  // Hazard box position
+  const hazardX = TOP_EVENT_CX - HAZARD_W / 2
+  const hazardY = CY - TOP_EVENT_R - 15 - HAZARD_H
+
+  // Top event text lines
+  const teLines = wrapText(topEvent, 12)
+
+  // ---- Build pathway curves ----
+  const paths: Array<{ d: string }> = []
+
+  // Prevention pathways: threat → barriers → top event
+  for (const tp of tPos) {
+    const bs = (prevByThreat.get(tp.id) ?? [])
+      .map((b) => bPos.find((bp) => bp.id === b.id))
+      .filter(Boolean) as PositionedBarrier[]
+
+    // Sorted by x position
+    bs.sort((a, b) => a.x - b.x)
+
+    if (bs.length === 0) {
+      // Direct: threat right edge → top event left tangent
+      const tx = TOP_EVENT_CX - TOP_EVENT_R
+      paths.push({ d: sCurve(THREAT_X + THREAT_W, tp.cy, tx, CY) })
+    } else {
+      // Threat → first barrier
+      paths.push({
+        d: sCurve(THREAT_X + THREAT_W, tp.cy, bs[0].x, bs[0].cy),
+      })
+      // Between consecutive barriers
+      for (let i = 0; i < bs.length - 1; i++) {
+        paths.push({
+          d: sCurve(bs[i].x + BARRIER_W, bs[i].cy, bs[i + 1].x, bs[i + 1].cy),
+        })
+      }
+      // Last barrier → top event left tangent
+      const last = bs[bs.length - 1]
+      const dx = TOP_EVENT_CX - (last.x + BARRIER_W)
+      const dy = CY - last.cy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+      const tx = TOP_EVENT_CX - TOP_EVENT_R * (dx / dist)
+      const ty = CY - TOP_EVENT_R * (dy / dist)
+      paths.push({ d: sCurve(last.x + BARRIER_W, last.cy, tx, ty) })
+    }
+  }
+
+  // Mitigation pathways: top event → barriers → consequences
+  const mitPositioned = bPos.filter((b) => b.side === 'mitigation')
+  mitPositioned.sort((a, b) => a.x - b.x)
+
+  if (mitPositioned.length > 0) {
+    // Top event right tangent → first mitigation barrier
+    const first = mitPositioned[0]
+    paths.push({
+      d: sCurve(TOP_EVENT_CX + TOP_EVENT_R, CY, first.x, first.cy),
+    })
+    // Between consecutive mitigation barriers
+    for (let i = 0; i < mitPositioned.length - 1; i++) {
+      paths.push({
+        d: sCurve(
+          mitPositioned[i].x + BARRIER_W,
+          mitPositioned[i].cy,
+          mitPositioned[i + 1].x,
+          mitPositioned[i + 1].cy,
+        ),
+      })
+    }
+    // Last mitigation barrier → each consequence
+    const last = mitPositioned[mitPositioned.length - 1]
+    for (const cp of cPos) {
+      paths.push({ d: sCurve(last.x + BARRIER_W, last.cy, cp.x, cp.cy) })
+    }
+  } else {
+    // No mitigation barriers: top event → each consequence directly
+    for (const cp of cPos) {
+      paths.push({ d: sCurve(TOP_EVENT_CX + TOP_EVENT_R, CY, cp.x, cp.cy) })
+    }
+  }
+
+  return (
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        overflow: 'auto',
+        background: '#E0E0E0',
+        position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          transform: `scale(${zoom})`,
+          transformOrigin: '0 0',
+          minWidth: 1400,
+        }}
+      >
+        <svg
+          viewBox={`0 0 1400 ${H}`}
+          width="100%"
+          style={{ fontFamily: 'Arial, sans-serif', display: 'block' }}
+        >
+          <defs>
+            <pattern
+              id="hazard"
+              width="14"
+              height="14"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <rect width="14" height="14" fill="#F5C518" />
+              <rect width="7" height="14" fill="#1A1A1A" />
+            </pattern>
+            <radialGradient id="orb">
+              <stop offset="0%" stopColor="#F97316" />
+              <stop offset="100%" stopColor="#DC2626" />
+            </radialGradient>
+          </defs>
+
+          {/* ===== LAYER 1: Pathway curves ===== */}
+          {paths.map((p, i) => (
+            <path
+              key={`path-${i}`}
+              d={p.d}
+              stroke={LINE_COLOR}
+              strokeWidth={2}
+              fill="none"
+            />
+          ))}
+
+          {/* ===== LAYER 2: Effectiveness indicators ===== */}
+          {bPos.map((b) => (
+            <rect
+              key={`ind-${b.id}`}
+              x={b.x - 12}
+              y={b.cy - 11}
+              width={8}
+              height={22}
+              rx={1}
+              fill={riskColor(b.risk_level)}
+            />
+          ))}
+
+          {/* ===== LAYER 3: Barrier blocks ===== */}
+          {bPos.map((b) => {
+            const ti = typeInfo(b.barrier_type)
+            const nameLines = wrapText(b.name, 22)
+            const isSelected = b.id === selectedBarrierId
+            return (
+              <g
+                key={`b-${b.id}`}
+                style={{ cursor: 'pointer' }}
+                onClick={() => onBarrierClick(b.id)}
+              >
+                <rect
+                  x={b.x}
+                  y={b.y}
+                  width={BARRIER_W}
+                  height={BARRIER_H}
+                  fill="white"
+                  stroke={isSelected ? '#3B82F6' : '#999'}
+                  strokeWidth={isSelected ? 2 : 1}
+                />
+                {isSelected && (
+                  <rect
+                    x={b.x - 3}
+                    y={b.y - 3}
+                    width={BARRIER_W + 6}
+                    height={BARRIER_H + 6}
+                    fill="none"
+                    stroke="rgba(59,130,246,0.3)"
+                    strokeWidth={2}
+                    rx={2}
+                  />
+                )}
+                {/* Row 1: Name */}
+                {nameLines.map((line, li) => (
+                  <text
+                    key={li}
+                    x={b.x + 15}
+                    y={b.y + 16 + li * 15}
+                    fill={BLUE}
+                    fontSize={13}
+                    fontWeight={700}
+                  >
+                    {line}
+                  </text>
+                ))}
+                {/* Separator 1 */}
+                <line
+                  x1={b.x}
+                  y1={b.y + 14 + nameLines.length * 15}
+                  x2={b.x + BARRIER_W}
+                  y2={b.y + 14 + nameLines.length * 15}
+                  stroke="#CCC"
+                  strokeWidth={0.5}
+                />
+                {/* Row 2: Role (underlined) */}
+                {b.barrier_role && (
+                  <text
+                    x={b.x + 15}
+                    y={b.y + 28 + nameLines.length * 15}
+                    fill={BLUE}
+                    fontSize={11}
+                    textDecoration="underline"
+                  >
+                    {b.barrier_role}
+                  </text>
+                )}
+                {/* Separator 2 */}
+                <line
+                  x1={b.x}
+                  y1={b.y + BARRIER_H - 22}
+                  x2={b.x + BARRIER_W}
+                  y2={b.y + BARRIER_H - 22}
+                  stroke="#CCC"
+                  strokeWidth={0.5}
+                />
+                {/* Row 3: Type indicator */}
+                <rect
+                  x={b.x + 15}
+                  y={b.y + BARRIER_H - 18}
+                  width={12}
+                  height={12}
+                  fill={ti.color}
+                  rx={1}
+                />
+                <text
+                  x={b.x + 32}
+                  y={b.y + BARRIER_H - 8}
+                  fill={BLUE}
+                  fontSize={10}
+                >
+                  {ti.label}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* ===== LAYER 4: Threat boxes ===== */}
+          {tPos.map((t) => {
+            const ci = contribInfo(t.contribution)
+            const nameLines = wrapText(t.name, 20)
+            return (
+              <g key={`t-${t.id}`}>
+                <rect
+                  x={t.x}
+                  y={t.y}
+                  width={THREAT_W}
+                  height={THREAT_H}
+                  fill="white"
+                  stroke={DARK_BLUE}
+                  strokeWidth={3}
+                />
+                {nameLines.map((line, li) => (
+                  <text
+                    key={li}
+                    x={t.x + 16}
+                    y={t.y + 24 + li * 18}
+                    fill={BLUE}
+                    fontSize={15}
+                    fontWeight={700}
+                  >
+                    {line}
+                  </text>
+                ))}
+                {/* Separator */}
+                <line
+                  x1={t.x}
+                  y1={t.y + 20 + nameLines.length * 18 + 8}
+                  x2={t.x + THREAT_W}
+                  y2={t.y + 20 + nameLines.length * 18 + 8}
+                  stroke="#BBB"
+                  strokeWidth={0.5}
+                />
+                {/* Contribution badge */}
+                <rect
+                  x={t.x + 16}
+                  y={t.y + THREAT_H - 30}
+                  width={14}
+                  height={14}
+                  fill={ci.color}
+                  rx={1}
+                />
+                <text
+                  x={t.x + 36}
+                  y={t.y + THREAT_H - 18}
+                  fill={BLUE}
+                  fontSize={11}
+                  fontWeight={600}
+                >
+                  {ci.label}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* ===== LAYER 5: Top Event ===== */}
+          {/* Hazard box (above circle) */}
+          <rect
+            x={hazardX}
+            y={hazardY}
+            width={HAZARD_W}
+            height={HAZARD_H}
+            fill="url(#hazard)"
+            stroke="#333"
+            strokeWidth={2}
+          />
+          <rect
+            x={hazardX + 8}
+            y={hazardY + 8}
+            width={HAZARD_W - 16}
+            height={HAZARD_H - 16}
+            fill="white"
+            stroke="#333"
+            strokeWidth={1}
+          />
+          {wrapText(topEvent, 22).map((line, i) => (
+            <text
+              key={`hz-${i}`}
+              x={TOP_EVENT_CX}
+              y={hazardY + 24 + i * 14}
+              textAnchor="middle"
+              fill={BLUE}
+              fontSize={11}
+              fontWeight={700}
+            >
+              {line}
+            </text>
+          ))}
+
+          {/* Gradient circle */}
+          <circle
+            cx={TOP_EVENT_CX}
+            cy={CY}
+            r={TOP_EVENT_R}
+            fill="url(#orb)"
+            stroke="#333"
+            strokeWidth={2}
+          />
+          {/* Inner white rect */}
+          <rect
+            x={TOP_EVENT_CX - 45}
+            y={CY - 36}
+            width={90}
+            height={72}
+            fill="white"
+            stroke="#444"
+            strokeWidth={1.5}
+          />
+          {teLines.slice(0, 3).map((line, i) => (
+            <text
+              key={`te-${i}`}
+              x={TOP_EVENT_CX}
+              y={CY - 16 + i * 16}
+              textAnchor="middle"
+              fill="#1A1A1A"
+              fontSize={13}
+              fontWeight={700}
+            >
+              {line}
+            </text>
+          ))}
+          <text
+            x={TOP_EVENT_CX}
+            y={CY + 30}
+            textAnchor="middle"
+            fill="#666"
+            fontSize={10}
+          >
+            (Top Event)
+          </text>
+
+          {/* ===== LAYER 6: Consequence boxes ===== */}
+          {cPos.map((c) => {
+            const nameLines = wrapText(c.name, 20)
+            return (
+              <g key={`c-${c.id}`}>
+                <rect
+                  x={c.x}
+                  y={c.y}
+                  width={CONSEQUENCE_W}
+                  height={CONSEQUENCE_H}
+                  fill="white"
+                  stroke="#DC2626"
+                  strokeWidth={3}
+                />
+                {nameLines.map((line, li) => (
+                  <text
+                    key={li}
+                    x={c.x + 18}
+                    y={c.y + 24 + li * 18}
+                    fill={BLUE}
+                    fontSize={14}
+                    fontWeight={700}
+                  >
+                    {line}
+                  </text>
+                ))}
+                {/* Red bottom strip */}
+                <rect
+                  x={c.x}
+                  y={c.y + CONSEQUENCE_H - 13}
+                  width={CONSEQUENCE_W}
+                  height={13}
+                  fill="#DC2626"
+                />
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
+      {/* Zoom controls */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          left: 16,
+          display: 'flex',
+          gap: 4,
+        }}
+      >
+        {[
+          { label: '+', fn: () => setZoom((z) => Math.min(z + 0.1, 2)) },
+          { label: '\u2212', fn: () => setZoom((z) => Math.max(z - 0.1, 0.5)) },
+          {
+            label: '\u2b1c',
+            fn: () => setZoom(1),
+          },
+        ].map((btn) => (
+          <button
+            key={btn.label}
+            onClick={btn.fn}
+            style={{
+              width: 32,
+              height: 32,
+              border: '1px solid #D1D5DB',
+              borderRadius: 4,
+              background: 'white',
+              cursor: 'pointer',
+              fontSize: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#374151',
+            }}
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}

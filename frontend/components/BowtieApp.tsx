@@ -1,22 +1,59 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BowtieProvider, useBowtieContext } from '@/context/BowtieContext'
 import BarrierForm from './sidebar/BarrierForm'
-import BowtieFlow from './diagram/BowtieFlow'
+import BowtieSVG from './diagram/BowtieSVG'
+import PathwayView from './diagram/PathwayView'
 import DetailPanel from './panel/DetailPanel'
 import { DEMO_SCENARIO } from './sidebar/constants'
+
+// ---------------------------------------------------------------------------
+// Demo threats and consequences (hardcoded — will be user-enterable later)
+// ---------------------------------------------------------------------------
+
+const DEMO_THREATS = [
+  { id: 't1', name: 'Equipment overpressure', contribution: 'high' as const },
+  { id: 't2', name: 'Overheating of equipment', contribution: 'medium' as const },
+  { id: 't3', name: 'Operator error during transfer', contribution: 'low' as const },
+]
+
+const DEMO_CONSEQUENCES = [
+  { id: 'c1', name: 'Gas release / toxic exposure' },
+  { id: 'c2', name: 'Explosive failure of equipment' },
+  { id: 'c3', name: 'Fire / explosion' },
+]
+
+// Map context riskLevel to BowtieSVG risk_level
+function mapRiskLevel(rl: string): 'Low' | 'Medium' | 'High' | null {
+  switch (rl) {
+    case 'green': return 'Low'
+    case 'amber': return 'Medium'
+    case 'red': return 'High'
+    default: return null
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Inner component — must be inside BowtieProvider to access context
 // ---------------------------------------------------------------------------
 
 function BowtieAppInner() {
-  const { addBarrier, setEventDescription, barriers } = useBowtieContext()
+  const {
+    addBarrier,
+    setEventDescription,
+    barriers,
+    predictions,
+    eventDescription,
+    selectedBarrierId,
+    setSelectedBarrierId,
+    isAnalyzing,
+  } = useBowtieContext()
 
-  // Load demo scenario on first mount — only if no barriers exist yet.
-  // Ref guard prevents React 18 StrictMode double-invocation from adding duplicates
-  // (state updates from first invocation haven't flushed when the second fires).
+  const [viewMode, setViewMode] = useState<'diagram' | 'pathway'>('diagram')
+
+  // Load demo scenario on first mount.
+  // Ref guard prevents React 18 StrictMode double-invocation from adding duplicates.
   const demoLoaded = useRef(false)
   useEffect(() => {
     if (demoLoaded.current || barriers.length > 0) return
@@ -24,7 +61,29 @@ function BowtieAppInner() {
     setEventDescription(DEMO_SCENARIO.eventDescription)
     DEMO_SCENARIO.barriers.forEach((b) => addBarrier(b))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Empty deps — run once on mount only (D-03)
+  }, [])
+
+  // Map barriers from context format to BowtieSVG format
+  const svgBarriers = barriers.map((b, _i) => {
+    // Assign prevention barriers to threats round-robin
+    const prevOnly = barriers.filter((x) => x.side === 'prevention')
+    const prevIdx = prevOnly.indexOf(b)
+    let threatId: string | undefined
+    if (b.side === 'prevention' && prevIdx >= 0 && DEMO_THREATS.length > 0) {
+      threatId = DEMO_THREATS[prevIdx % DEMO_THREATS.length].id
+    }
+
+    return {
+      id: b.id,
+      name: b.name,
+      side: b.side,
+      barrier_type: b.barrier_type,
+      barrier_role: b.barrierRole,
+      line_of_defense: b.line_of_defense,
+      risk_level: mapRiskLevel(b.riskLevel),
+      threatId,
+    }
+  })
 
   return (
     <div className="flex h-screen min-w-[1280px] bg-[#0F1117]">
@@ -33,9 +92,58 @@ function BowtieAppInner() {
         <BarrierForm />
       </aside>
 
-      {/* Center panel: Bowtie diagram */}
-      <main className="flex-1 h-full overflow-hidden">
-        <BowtieFlow />
+      {/* Center panel: Bowtie diagram or pathway view */}
+      <main className="flex-1 h-full overflow-hidden relative">
+        {/* View toggle */}
+        <div className="absolute top-3 right-3 z-20 flex rounded-lg overflow-hidden border border-[#2E3348] bg-[#242836]">
+          <button
+            onClick={() => setViewMode('diagram')}
+            className={`px-3 py-1 text-xs font-medium transition-colors ${
+              viewMode === 'diagram'
+                ? 'bg-[#3B82F6] text-white'
+                : 'text-[#8B93A8] hover:text-[#E8ECF4]'
+            }`}
+          >
+            Diagram View
+          </button>
+          <button
+            onClick={() => setViewMode('pathway')}
+            className={`px-3 py-1 text-xs font-medium transition-colors ${
+              viewMode === 'pathway'
+                ? 'bg-[#3B82F6] text-white'
+                : 'text-[#8B93A8] hover:text-[#E8ECF4]'
+            }`}
+          >
+            Pathway View
+          </button>
+        </div>
+
+        {/* Analyzing overlay */}
+        {isAnalyzing && (
+          <div className="absolute inset-0 z-10 pointer-events-none flex items-end justify-center pb-4">
+            <span className="bg-[#242836] border border-[#2E3348] rounded-md px-3 py-1.5 text-xs text-[#8B93A8] shadow-lg animate-pulse">
+              Analyzing barriers...
+            </span>
+          </div>
+        )}
+
+        {viewMode === 'diagram' ? (
+          <BowtieSVG
+            topEvent={eventDescription}
+            threats={DEMO_THREATS}
+            consequences={DEMO_CONSEQUENCES}
+            barriers={svgBarriers}
+            selectedBarrierId={selectedBarrierId}
+            onBarrierClick={setSelectedBarrierId}
+          />
+        ) : (
+          <PathwayView
+            barriers={barriers}
+            predictions={predictions}
+            selectedBarrierId={selectedBarrierId}
+            onBarrierClick={setSelectedBarrierId}
+          />
+        )}
       </main>
 
       {/* Right panel: barrier detail */}
