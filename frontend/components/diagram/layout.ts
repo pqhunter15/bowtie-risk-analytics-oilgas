@@ -5,8 +5,8 @@ import type { Barrier } from '@/lib/types'
 // ---------------------------------------------------------------------------
 // Node dimensions (match the TSX components)
 // ---------------------------------------------------------------------------
-const BARRIER_W = 130
-const BARRIER_H = 40
+export const BARRIER_W = 130
+export const BARRIER_H = 40
 const THREAT_W = 180
 const THREAT_H = 50
 const CONSEQUENCE_W = 180
@@ -68,6 +68,37 @@ const DEMO_CONSEQUENCES = [
   { id: 'consequence-1', label: 'Gas release / toxic exposure' },
   { id: 'consequence-2', label: 'Fire / explosion' },
 ]
+
+// ---------------------------------------------------------------------------
+// Pathway lines — continuous SVG lines behind the nodes
+// ---------------------------------------------------------------------------
+
+export interface PathwayLine {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  color: string
+}
+
+/** Continuous straight lines from each threat → top event and top event → each consequence.
+ *  All lines are neutral gray — risk color is shown via indicator rects on barriers. */
+export function getPathwayLines(): PathwayLine[] {
+  return [
+    // Prevention: each threat right handle → top event left handle
+    ...THREAT_HANDLES_R.map((h) => ({
+      x1: h.x, y1: h.y,
+      x2: TE_HANDLE_L.x, y2: TE_HANDLE_L.y,
+      color: '#9CA3AF',
+    })),
+    // Mitigation: top event right handle → each consequence left handle
+    ...CONSEQUENCE_HANDLES_L.map((h) => ({
+      x1: TE_HANDLE_R.x, y1: TE_HANDLE_R.y,
+      x2: h.x, y2: h.y,
+      color: '#9CA3AF',
+    })),
+  ]
+}
 
 // ---------------------------------------------------------------------------
 // Layout builder
@@ -152,6 +183,7 @@ export function buildBowtieLayout(
           riskLevel: b.riskLevel ?? 'unanalyzed',
           probability: b.probability,
           barrierId: b.id,
+          barrierType: b.barrier_type,
         },
       })
     })
@@ -194,6 +226,7 @@ export function buildBowtieLayout(
           riskLevel: b.riskLevel ?? 'unanalyzed',
           probability: b.probability,
           barrierId: b.id,
+          barrierType: b.barrier_type,
         },
       })
     })
@@ -234,5 +267,12 @@ export function buildBowtieLayout(
     })
   }
 
-  return { nodes, edges }
+  // Hide all React Flow edges — replaced by continuous SVG pathway lines
+  const hiddenEdges = edges.map((e) => ({
+    ...e,
+    style: { ...e.style, opacity: 0 },
+    interactionWidth: 0,
+  }))
+
+  return { nodes, edges: hiddenEdges }
 }

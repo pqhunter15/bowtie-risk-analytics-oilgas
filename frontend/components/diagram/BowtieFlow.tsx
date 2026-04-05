@@ -6,12 +6,13 @@ import {
   ReactFlowProvider,
   Background,
   Controls,
+  useViewport,
   type NodeMouseHandler,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { useBowtieContext } from '@/context/BowtieContext'
-import { buildBowtieLayout } from './layout'
+import { buildBowtieLayout, getPathwayLines, BARRIER_W, BARRIER_H } from './layout'
 import BarrierNode from './BarrierNode'
 import TopEventNode from './TopEventNode'
 import ThreatNode from './ThreatNode'
@@ -28,6 +29,70 @@ const nodeTypes = {
   topEvent: TopEventNode,
   threat: ThreatNode,
   consequence: ConsequenceNode,
+}
+
+// ---------------------------------------------------------------------------
+// Continuous pathway lines + effectiveness indicator rects.
+// SVG layer tracks viewport pan/zoom. Renders BEHIND nodes (z-index 1).
+// ---------------------------------------------------------------------------
+
+const INDICATOR_COLORS: Record<string, string> = {
+  red: '#EF4444',
+  amber: '#F59E0B',
+  green: '#22C55E',
+  unanalyzed: '#9CA3AF',
+}
+
+interface BarrierIndicator {
+  cx: number
+  cy: number
+  riskLevel: string
+}
+
+function PathwayLines({ barriers }: { barriers: BarrierIndicator[] }) {
+  const { x, y, zoom } = useViewport()
+  const lines = getPathwayLines()
+
+  return (
+    <svg
+      style={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 1,
+      }}
+    >
+      <g transform={`translate(${x},${y}) scale(${zoom})`}>
+        {/* Continuous pathway lines */}
+        {lines.map((line, i) => (
+          <line
+            key={`l-${i}`}
+            x1={line.x1}
+            y1={line.y1}
+            x2={line.x2}
+            y2={line.y2}
+            stroke={line.color}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        ))}
+        {/* Effectiveness indicator rects at each barrier position */}
+        {barriers.map((b, i) => (
+          <rect
+            key={`ind-${i}`}
+            x={b.cx - 4}
+            y={b.cy - 10}
+            width={8}
+            height={20}
+            rx={1}
+            fill={INDICATOR_COLORS[b.riskLevel] ?? INDICATOR_COLORS.unanalyzed}
+          />
+        ))}
+      </g>
+    </svg>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +164,19 @@ export default function BowtieFlow() {
 
     return { nodes: withSelection, edges: layout.edges }
   }, [barriers, eventDescription, predictions, selectedBarrierId])
+
+  // Barrier indicator rects for the SVG pathway layer
+  const barrierIndicators: BarrierIndicator[] = useMemo(
+    () =>
+      nodes
+        .filter((n) => n.type === 'barrier')
+        .map((n) => ({
+          cx: n.position.x + BARRIER_W / 2,
+          cy: n.position.y + BARRIER_H / 2,
+          riskLevel: String((n.data as Record<string, unknown>).riskLevel ?? 'unanalyzed'),
+        })),
+    [nodes],
+  )
 
   // Node click handler — sets selectedBarrierId in context
   const onNodeClick: NodeMouseHandler = useCallback(
@@ -173,9 +251,10 @@ export default function BowtieFlow() {
             onNodeClick={onNodeClick}
             fitView
             proOptions={{ hideAttribution: true }}
-            className="bg-[#0F1117]"
+            className="bg-[#F3F4F6]"
           >
-            <Background color="#2E3348" gap={20} size={1} />
+            <PathwayLines barriers={barrierIndicators} />
+            <Background color="#D1D5DB" gap={20} size={1} />
             <Controls
               className="!bg-[#1A1D27] !border-[#2E3348] !shadow-xl [&>button]:!bg-[#1A1D27] [&>button]:!border-b-[#2E3348] [&>button:hover]:!bg-[#242836] [&>button>svg]:!fill-[#8B93A8]"
             />
