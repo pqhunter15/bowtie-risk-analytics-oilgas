@@ -6,7 +6,7 @@ fixture. No real model artifacts are required — works in CI without data/model
 Tests:
   test_predict_valid_returns_200      — full payload, verify response shape
   test_predict_missing_required_field_returns_422 — missing `side` → 422
-  test_predict_pif_defaults           — only required fields → PIFs default 0
+  test_predict_pif_defaults           — only 4 required barrier categoricals → all optional fields default
   test_health_returns_200             — GET /health → status=ok + fields present
   test_health_model_info              — model1 type=XGBoost, loaded=True
   test_predict_does_not_reload_resources — two requests → __init__ not called again
@@ -44,20 +44,22 @@ VALID_PREDICT_PAYLOAD: dict = {
     "barrier_type": "engineering",
     "line_of_defense": "1",
     "barrier_family": "alarm",
+    # source_agency and primary_threat_category are incident-level, optional
     "source_agency": "BSEE",
+    "primary_threat_category": "mechanical_failure",
+    # 9 active PIF features (fatigue/workload/time_pressure excluded from training scope)
     "pif_competence": 1,
-    "pif_fatigue": 0,
     "pif_communication": 1,
     "pif_situational_awareness": 0,
     "pif_procedures": 1,
-    "pif_workload": 0,
-    "pif_time_pressure": 0,
     "pif_tools_equipment": 0,
     "pif_safety_culture": 0,
     "pif_management_of_change": 0,
     "pif_supervision": 0,
     "pif_training": 0,
     "supporting_text_count": 3,
+    "pathway_sequence": 0,
+    "upstream_failure_rate": 0.0,
 }
 
 VALID_EXPLAIN_PAYLOAD: dict = {
@@ -73,20 +75,23 @@ _FEATURE_NAMES = [
     {"name": "barrier_type", "category": "barrier"},
     {"name": "line_of_defense", "category": "barrier"},
     {"name": "barrier_family", "category": "barrier"},
-    {"name": "source_agency", "category": "barrier"},
+    # incident-level categoricals
+    {"name": "source_agency", "category": "incident_context"},
+    {"name": "primary_threat_category", "category": "incident_context"},
+    # 9 active PIF features (fatigue/workload/time_pressure excluded from training scope)
     {"name": "pif_competence", "category": "incident_context"},
-    {"name": "pif_fatigue", "category": "incident_context"},
     {"name": "pif_communication", "category": "incident_context"},
     {"name": "pif_situational_awareness", "category": "incident_context"},
     {"name": "pif_procedures", "category": "incident_context"},
-    {"name": "pif_workload", "category": "incident_context"},
-    {"name": "pif_time_pressure", "category": "incident_context"},
     {"name": "pif_tools_equipment", "category": "incident_context"},
     {"name": "pif_safety_culture", "category": "incident_context"},
     {"name": "pif_management_of_change", "category": "incident_context"},
     {"name": "pif_supervision", "category": "incident_context"},
     {"name": "pif_training", "category": "incident_context"},
+    # numeric
     {"name": "supporting_text_count", "category": "barrier"},
+    {"name": "pathway_sequence", "category": "barrier"},
+    {"name": "upstream_failure_rate", "category": "barrier"},
 ]
 
 
@@ -231,34 +236,33 @@ def test_predict_missing_required_field_returns_422(client: TestClient) -> None:
 
 
 def test_predict_pif_defaults(client: TestClient, mock_predictor: MagicMock) -> None:
-    """POST /predict with only 5 required categoricals defaults PIFs to 0."""
+    """POST /predict with only 4 required barrier categoricals defaults all optional fields to 0."""
     minimal_payload = {
         "side": "left",
         "barrier_type": "engineering",
         "line_of_defense": "1",
         "barrier_family": "alarm",
-        "source_agency": "BSEE",
     }
     resp = client.post("/predict", json=minimal_payload)
     assert resp.status_code == 200
 
-    # Verify the predictor was called with defaulted PIFs
+    # Verify the predictor was called with defaulted PIFs (9 active features)
     called_features = mock_predictor.predict.call_args[0][0]
     assert called_features["pif_competence"] == 0
-    assert called_features["pif_fatigue"] == 0
     assert called_features["pif_communication"] == 0
     assert called_features["pif_situational_awareness"] == 0
     assert called_features["pif_procedures"] == 0
-    assert called_features["pif_workload"] == 0
-    assert called_features["pif_time_pressure"] == 0
     assert called_features["pif_tools_equipment"] == 0
     assert called_features["pif_safety_culture"] == 0
     assert called_features["pif_management_of_change"] == 0
     assert called_features["pif_supervision"] == 0
     assert called_features["pif_training"] == 0
     assert called_features["supporting_text_count"] == 0
+    # Incident-level categoricals get safe defaults
+    assert called_features["source_agency"] == "UNKNOWN"
+    assert called_features["primary_threat_category"] == "unknown_threat"
 
-    # Response still has 18 SHAP values
+    # Response has 18 SHAP values (matches _FEATURE_NAMES length)
     data = resp.json()
     assert len(data["model1_shap"]) == 18
 

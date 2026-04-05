@@ -18,38 +18,52 @@ from pydantic import BaseModel, ConfigDict
 # ---------------------------------------------------------------------------
 
 class PredictRequest(BaseModel):
-    """POST /predict request body — 18 barrier feature fields (D-01).
+    """POST /predict request body — 18 barrier/incident feature fields (D-01).
 
-    The 5 categorical fields are required strings.
-    The 12 PIF boolean fields default to 0.
-    supporting_text_count defaults to 0.
+    Feature layout matches feature_names.json (18 features, derived from the
+    558-row training scope):
+      Barrier categoricals (4 required): side, barrier_type, line_of_defense,
+        barrier_family.
+      Incident-level categoricals (2 with defaults): source_agency,
+        primary_threat_category.
+      PIF booleans (9, all default 0): pif_* features (fatigue/workload/
+        time_pressure excluded from training scope).
+      Numeric (3 with defaults): supporting_text_count, pathway_sequence,
+        upstream_failure_rate.
+
+    Callers that omit source_agency get "UNKNOWN".
+    Callers that omit primary_threat_category get "unknown_threat" (maps to
+    the encoder's unknown-value fallback).
     """
 
     model_config = ConfigDict(strict=False)
 
-    # Categorical barrier features (required)
+    # Barrier-level categoricals (required)
     side: str
     barrier_type: str
     line_of_defense: str
     barrier_family: str
-    source_agency: str
 
-    # PIF boolean fields (default 0 — may be absent in partial requests)
+    # Incident-level categoricals (optional — safe defaults for API callers)
+    source_agency: str = "UNKNOWN"
+    primary_threat_category: str = "unknown_threat"
+
+    # PIF boolean fields — 9 active features (default 0)
+    # pif_fatigue, pif_workload, pif_time_pressure excluded from training scope
     pif_competence: int = 0
-    pif_fatigue: int = 0
     pif_communication: int = 0
     pif_situational_awareness: int = 0
     pif_procedures: int = 0
-    pif_workload: int = 0
-    pif_time_pressure: int = 0
     pif_tools_equipment: int = 0
     pif_safety_culture: int = 0
     pif_management_of_change: int = 0
     pif_supervision: int = 0
     pif_training: int = 0
 
-    # Numeric feature
+    # Numeric features (default 0)
     supporting_text_count: int = 0
+    pathway_sequence: int = 0
+    upstream_failure_rate: float = 0.0
 
 
 class ShapValue(BaseModel):

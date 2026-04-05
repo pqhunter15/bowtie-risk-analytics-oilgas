@@ -17,14 +17,14 @@
   },
   {
     "name": "source_agency",
-    "category": "barrier"
-  },
-  {
-    "name": "pif_competence",
     "category": "incident_context"
   },
   {
-    "name": "pif_fatigue",
+    "name": "primary_threat_category",
+    "category": "incident_context"
+  },
+  {
+    "name": "pif_competence",
     "category": "incident_context"
   },
   {
@@ -37,14 +37,6 @@
   },
   {
     "name": "pif_procedures",
-    "category": "incident_context"
-  },
-  {
-    "name": "pif_workload",
-    "category": "incident_context"
-  },
-  {
-    "name": "pif_time_pressure",
     "category": "incident_context"
   },
   {
@@ -69,6 +61,14 @@
   },
   {
     "name": "supporting_text_count",
+    "category": "barrier"
+  },
+  {
+    "name": "pathway_sequence",
+    "category": "barrier"
+  },
+  {
+    "name": "upstream_failure_rate",
     "category": "barrier"
   }
 ]

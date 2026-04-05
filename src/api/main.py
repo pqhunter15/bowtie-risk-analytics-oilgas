@@ -163,6 +163,11 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
         predictor: BarrierPredictor = req.app.state.predictor
         features = request.model_dump()
 
+        # top_event_category and source_agency are incident-level features that
+        # the frontend doesn't supply per-barrier. PredictRequest provides safe
+        # defaults ("loss_of_containment", "UNKNOWN") so this dict is already
+        # complete — no manual injection needed here.
+
         try:
             result = predictor.predict(features)
         except Exception as exc:

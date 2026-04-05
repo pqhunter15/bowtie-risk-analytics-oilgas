@@ -41,12 +41,7 @@ import numpy as np
 import shap
 import xgboost as xgb
 
-from src.modeling.feature_engineering import (
-    ARTIFACTS_DIR,
-    CATEGORICAL_FEATURES,
-    NUMERIC_FEATURES,
-    PIF_FEATURES,
-)
+from src.modeling.feature_engineering import ARTIFACTS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +116,17 @@ class BarrierPredictor:
 
         logger.debug("Feature names loaded: %d features", len(self._feature_names))
 
+        # Derive categorical feature names from encoder.n_features_in_ rather than
+        # importing CATEGORICAL_FEATURES from feature_engineering.py — this ensures
+        # the inference code always matches the actual trained encoder, regardless of
+        # whether the module constant has been updated.
+        n_cat = self._encoder.n_features_in_
+        self._categorical_feature_names: list[str] = self._feature_names[:n_cat]
+        self._non_categorical_feature_names: list[str] = self._feature_names[n_cat:]
+        logger.debug(
+            "Categorical features (%d): %s", n_cat, self._categorical_feature_names
+        )
+
         # Load XGBoost models (native JSON — version-stable serialization)
         self._xgb1 = xgb.XGBClassifier()
         self._xgb1.load_model(str(artifacts_dir / "xgb_model1.json"))
@@ -186,23 +192,25 @@ class BarrierPredictor:
               - model1_shap_values, model2_shap_values: dict[str, float] — ALWAYS separate
               - model1_base_value, model2_base_value: float (log-odds base)
         """
-        # Build a single-row array in canonical column order
+        # Build a single-row array in canonical column order.
+        # Use self._categorical_feature_names (derived from encoder.n_features_in_)
+        # rather than the module-level CATEGORICAL_FEATURES constant, so inference
+        # always matches the actual trained artifact regardless of code drift.
+        cat_set = set(self._categorical_feature_names)
         row_values: list[Any] = []
         for name in self._feature_names:
-            if name in CATEGORICAL_FEATURES:
+            if name in cat_set:
                 row_values.append(features_dict.get(name, "unknown"))
-            elif name in PIF_FEATURES:
-                row_values.append(int(features_dict.get(name, 0)))
             else:
-                # Numeric (supporting_text_count etc.)
+                # PIF booleans and numeric features both treated as numeric
                 row_values.append(float(features_dict.get(name, 0)))
 
         # Encode categorical columns using the saved OrdinalEncoder
-        n_cat = len(CATEGORICAL_FEATURES)
+        n_cat = len(self._categorical_feature_names)
         cat_raw = [[row_values[i] for i in range(n_cat)]]
         cat_encoded: np.ndarray = self._encoder.transform(cat_raw)
 
-        # Assemble numeric row: [encoded_categoricals, PIF_ints, numeric]
+        # Assemble full row: [encoded_categoricals, non_categorical_floats]
         non_cat_values = row_values[n_cat:]
         X_row: np.ndarray = np.concatenate(
             [cat_encoded[0].astype(float), np.array(non_cat_values, dtype=float)]

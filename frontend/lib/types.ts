@@ -11,24 +11,30 @@ export interface RiskThresholds {
 // ---------------------------------------------------------------------------
 
 export interface PredictRequest {
+  // Barrier-level categoricals (required)
   side: string
   barrier_type: string
   line_of_defense: string
   barrier_family: string
-  source_agency: string
+  // Incident-level categoricals (optional — backend defaults to 'loss_of_containment' / 'UNKNOWN')
+  top_event_category?: string
+  source_agency?: string
+  // PIF booleans (9 active features — all optional, backend defaults to 0)
+  // pif_fatigue, pif_workload, pif_time_pressure excluded from training scope
   pif_competence?: number
-  pif_fatigue?: number
   pif_communication?: number
   pif_situational_awareness?: number
   pif_procedures?: number
-  pif_workload?: number
-  pif_time_pressure?: number
   pif_tools_equipment?: number
   pif_safety_culture?: number
   pif_management_of_change?: number
   pif_supervision?: number
   pif_training?: number
+  // Numeric features (optional — backend defaults to 0)
   supporting_text_count?: number
+  primary_threat_category?: number
+  pathway_sequence?: number
+  upstream_failure_rate?: number
 }
 
 export interface ShapValue {
@@ -97,14 +103,13 @@ export interface ExplainResponse {
 // Frontend-specific types
 // ---------------------------------------------------------------------------
 
+// PIF flags — 9 active features matching training scope.
+// pif_fatigue, pif_workload, pif_time_pressure excluded (not in training scope).
 export interface PifFlags {
   pif_competence: number
-  pif_fatigue: number
   pif_communication: number
   pif_situational_awareness: number
   pif_procedures: number
-  pif_workload: number
-  pif_time_pressure: number
   pif_tools_equipment: number
   pif_safety_culture: number
   pif_management_of_change: number
@@ -117,12 +122,9 @@ export interface PifFlags {
  *  supervision=53%, safety_culture=52% */
 export const DEFAULT_PIF_FLAGS: PifFlags = {
   pif_competence: 0,
-  pif_fatigue: 0,
   pif_communication: 0,
   pif_situational_awareness: 1,
   pif_procedures: 1,
-  pif_workload: 0,
-  pif_time_pressure: 0,
   pif_tools_equipment: 1,
   pif_safety_culture: 1,
   pif_management_of_change: 0,
@@ -130,15 +132,12 @@ export const DEFAULT_PIF_FLAGS: PifFlags = {
   pif_training: 0,
 }
 
-/** Display names for PIF flags (matches pif_to_degradation.yaml) */
+/** Display names for PIF flags (matches pif_to_degradation.yaml — 9 active features) */
 export const PIF_DISPLAY_NAMES: Record<keyof PifFlags, string> = {
   pif_competence: 'Operator Competence',
-  pif_fatigue: 'Operator Fatigue',
   pif_communication: 'Communication',
   pif_situational_awareness: 'Situational Awareness',
   pif_procedures: 'Procedures',
-  pif_workload: 'Workload',
-  pif_time_pressure: 'Time Pressure',
   pif_tools_equipment: 'Tools & Equipment',
   pif_safety_culture: 'Safety Culture',
   pif_management_of_change: 'Management of Change',
@@ -156,4 +155,17 @@ export interface Barrier {
   barrierRole: string
   riskLevel: RiskLevel
   probability?: number
+}
+
+export interface Threat {
+  id: string
+  name: string
+  description: string
+}
+
+export interface Consequence {
+  id: string
+  name: string
+  description: string
+  severity?: string  // 'critical' | 'high' | 'medium' | 'low' — optional
 }
