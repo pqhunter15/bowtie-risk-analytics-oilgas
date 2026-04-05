@@ -78,11 +78,16 @@ interface ShapWaterfallProps {
   shap: ShapValue[]
   baseValue: number
   featureDisplayNames?: Record<string, string>  // pif_fatigue -> "Operator Fatigue"
+  hiddenFeatures?: Set<string>  // Feature names to exclude from the chart
 }
 
-export default function ShapWaterfall({ shap, baseValue, featureDisplayNames }: ShapWaterfallProps) {
+export default function ShapWaterfall({ shap, baseValue, featureDisplayNames, hiddenFeatures }: ShapWaterfallProps) {
+  const visible = hiddenFeatures
+    ? shap.filter((s) => !hiddenFeatures.has(s.feature))
+    : shap
+
   const barrierData = buildWaterfallData(
-    shap.filter((s) => s.category === 'barrier'),
+    visible.filter((s) => s.category === 'barrier'),
     baseValue,
     featureDisplayNames,
   )
@@ -94,7 +99,7 @@ export default function ShapWaterfall({ shap, baseValue, featureDisplayNames }: 
       : baseValue
 
   const contextData = buildWaterfallData(
-    shap.filter((s) => s.category === 'incident_context'),
+    visible.filter((s) => s.category === 'incident_context'),
     barrierRunningEnd,
     featureDisplayNames,
   )
@@ -119,7 +124,7 @@ export default function ShapWaterfall({ shap, baseValue, featureDisplayNames }: 
 
   if (data.length === 0) {
     return (
-      <div className="text-xs text-gray-400 italic py-2">No SHAP values available.</div>
+      <div className="text-xs text-[#5A6178] italic py-2">No SHAP values available.</div>
     )
   }
 
@@ -127,12 +132,12 @@ export default function ShapWaterfall({ shap, baseValue, featureDisplayNames }: 
 
   return (
     <div className="mb-4">
-      <h3 className="text-base font-semibold mb-2">Barrier Analysis Factors</h3>
-      <p className="text-xs text-gray-500 mb-1">Base rate: {baseValue.toFixed(3)}</p>
+      <h3 className="text-base font-semibold mb-2 text-[#E8ECF4]">Barrier Analysis Factors</h3>
+      <p className="text-xs text-[#8B93A8] mb-1">Base rate: {baseValue.toFixed(3)}</p>
 
       {/* Plain-English summary of top degradation factors (D-08) */}
       {contextData.length > 0 && (
-        <p className="text-xs text-gray-600 mb-2" data-testid="degradation-summary">
+        <p className="text-xs text-[#8B93A8] mb-2" data-testid="degradation-summary">
           Primary degradation factors:{' '}
           {contextData
             .slice(0, 3)
@@ -152,17 +157,22 @@ export default function ShapWaterfall({ shap, baseValue, featureDisplayNames }: 
         >
           <XAxis
             type="number"
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#8B93A8' }}
             tickFormatter={(v: number) => v.toFixed(2)}
+            stroke="#2E3348"
           />
           <YAxis
             type="category"
             dataKey="feature"
             width={140}
-            tick={{ fontSize: 12 }}
+            tick={{ fontSize: 12, fill: '#8B93A8' }}
+            stroke="#2E3348"
           />
-          <ReferenceLine x={0} stroke="#d1d5db" strokeDasharray="3 3" />
+          <ReferenceLine x={0} stroke="#4A5178" strokeDasharray="3 3" />
           <Tooltip
+            contentStyle={{ backgroundColor: '#1A1D27', border: '1px solid #2E3348', borderRadius: '6px' }}
+            labelStyle={{ color: '#E8ECF4' }}
+            itemStyle={{ color: '#8B93A8' }}
             formatter={(val, name) => {
               if (name === 'value' && typeof val === 'number') {
                 return [val.toFixed(4), 'SHAP']
@@ -190,7 +200,7 @@ export default function ShapWaterfall({ shap, baseValue, featureDisplayNames }: 
       </ResponsiveContainer>
 
       {hasContext && (
-        <p className="text-xs text-gray-400 mt-1 italic">
+        <p className="text-xs text-[#5A6178] mt-1 italic">
           Degradation factors from historical incident context
         </p>
       )}

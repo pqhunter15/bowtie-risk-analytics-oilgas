@@ -29,14 +29,14 @@ const RISK_LEVEL_LABELS: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
-// Risk ring color classes per UI-SPEC Color section
+// Risk color hex values for dark-themed nodes
 // ---------------------------------------------------------------------------
 
-const riskRing: Record<string, string> = {
-  red: 'ring-2 ring-red-500',
-  amber: 'ring-2 ring-amber-400',
-  green: 'ring-2 ring-green-500',
-  unanalyzed: 'ring-1 ring-gray-300',
+const RISK_COLORS: Record<string, string> = {
+  red: '#EF4444',
+  amber: '#F59E0B',
+  green: '#22C55E',
+  unanalyzed: '#2E3348',
 }
 
 // ---------------------------------------------------------------------------
@@ -44,30 +44,50 @@ const riskRing: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export default function BarrierNode({ data }: NodeProps<BarrierNodeType>) {
-  const ringClass = data.selected
-    ? 'ring-4 ring-blue-400'
-    : (riskRing[data.riskLevel] ?? riskRing.unanalyzed)
+  const analyzed = data.riskLevel && data.riskLevel !== 'unanalyzed'
+  const riskColor = RISK_COLORS[data.riskLevel] ?? RISK_COLORS.unanalyzed
+
+  const borderStyle = data.selected
+    ? '3px solid #3B82F6'
+    : analyzed
+      ? `1px solid ${riskColor}`
+      : '1px solid #2E3348'
+
+  const leftBorder = analyzed && !data.selected
+    ? `3px solid ${riskColor}`
+    : undefined
 
   return (
     <div
-      className={`rounded-md bg-white p-3 shadow ${ringClass} w-[160px] cursor-pointer nodrag hover:shadow-md hover:scale-[1.02] transition-all duration-150`}
+      className="rounded-md p-3 w-[160px] cursor-pointer nodrag hover:brightness-110 transition-all duration-150"
+      style={{
+        backgroundColor: '#1A1D27',
+        border: borderStyle,
+        borderLeft: leftBorder ?? (data.selected ? '3px solid #3B82F6' : borderStyle),
+        boxShadow: data.selected
+          ? '0 0 0 2px rgba(59,130,246,0.3)'
+          : '0 2px 4px rgba(0,0,0,0.3)',
+      }}
     >
       {/* Barrier name */}
-      <p className="text-sm font-semibold truncate">{data.label}</p>
+      <p className="text-sm font-semibold truncate" style={{ color: '#E8ECF4' }}>
+        {data.label}
+      </p>
 
-      {/* Risk level badge — shows H/M/L after analysis */}
-      {data.riskLevel && data.riskLevel !== 'unanalyzed' ? (
-        <p className="text-xs text-gray-500 font-medium">
+      {/* Risk level badge — shows Low/Medium/High after analysis */}
+      {analyzed ? (
+        <p className="text-xs font-medium" style={{ color: riskColor }}>
           {RISK_LEVEL_LABELS[data.riskLevel] ?? ''}
         </p>
       ) : (
-        /* Loading placeholder area — pulses during analysis (handled by isAnalyzing in BowtieFlow) */
-        <p className="text-xs text-transparent select-none">--</p>
+        <p className="text-xs select-none" style={{ color: '#5A6178' }}>
+          Not analyzed
+        </p>
       )}
 
       {/* React Flow handles */}
-      <Handle type="target" position={Position.Left} />
-      <Handle type="source" position={Position.Right} />
+      <Handle type="target" position={Position.Left} className="!bg-[#4A5178]" />
+      <Handle type="source" position={Position.Right} className="!bg-[#4A5178]" />
     </div>
   )
 }

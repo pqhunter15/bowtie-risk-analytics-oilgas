@@ -10,7 +10,7 @@ const levelColors: Record<string, string> = {
   red: 'bg-red-500 text-white',
   amber: 'bg-amber-400 text-gray-900',
   green: 'bg-green-500 text-white',
-  unanalyzed: 'bg-gray-300 text-gray-600',
+  unanalyzed: 'bg-[#242836] text-[#5A6178]',
 }
 
 // ---------------------------------------------------------------------------
@@ -52,8 +52,8 @@ export default function RiskScoreBadge({ probability, riskLevel }: RiskScoreBadg
         {levelConfig.label}
       </span>
       <div>
-        <p className="text-sm font-semibold">{levelConfig.subtitle}</p>
-        <p className="text-xs text-gray-500">
+        <p className="text-sm font-semibold text-[#E8ECF4]">{levelConfig.subtitle}</p>
+        <p className="text-xs text-[#8B93A8]">
           Historical reliability assessment
         </p>
       </div>

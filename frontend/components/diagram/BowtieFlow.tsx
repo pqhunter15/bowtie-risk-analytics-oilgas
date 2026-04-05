@@ -113,13 +113,13 @@ export default function BowtieFlow() {
   return (
     <div className="flex-1 h-full relative">
       {/* View toggle (D-10, Fidel-#55, Fidel-#56) */}
-      <div className="absolute top-3 right-3 z-20 flex rounded-md overflow-hidden border border-gray-300 shadow-sm">
+      <div className="absolute top-3 right-3 z-20 flex rounded-lg overflow-hidden border border-[#2E3348] bg-[#242836]">
         <button
           onClick={() => setViewMode('diagram')}
           className={`px-3 py-1 text-xs font-medium transition-colors ${
             viewMode === 'diagram'
-              ? 'bg-gray-800 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-100'
+              ? 'bg-[#3B82F6] text-white'
+              : 'text-[#8B93A8] hover:text-[#E8ECF4]'
           }`}
         >
           Diagram View
@@ -128,8 +128,8 @@ export default function BowtieFlow() {
           onClick={() => setViewMode('pathway')}
           className={`px-3 py-1 text-xs font-medium transition-colors ${
             viewMode === 'pathway'
-              ? 'bg-gray-800 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-100'
+              ? 'bg-[#3B82F6] text-white'
+              : 'text-[#8B93A8] hover:text-[#E8ECF4]'
           }`}
         >
           Pathway View
@@ -138,11 +138,11 @@ export default function BowtieFlow() {
 
       {/* Demo badge — shown above the diagram on first load with demo scenario */}
       {viewMode === 'diagram' && showDemoBanner && hasDemoBarriers && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-md px-3 py-1.5 text-xs text-blue-700 shadow">
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-[#242836] border border-[#2E3348] rounded-md px-3 py-1.5 text-xs text-[#8B93A8] shadow-lg">
           <span>Demo scenario — modify or start fresh</span>
           <button
             onClick={() => setShowDemoBanner(false)}
-            className="ml-1 text-blue-400 hover:text-blue-700 font-medium"
+            className="ml-1 text-[#5A6178] hover:text-[#E8ECF4] font-medium"
             aria-label="Dismiss demo banner"
           >
             ×
@@ -153,7 +153,7 @@ export default function BowtieFlow() {
       {/* Analyzing overlay — pulse effect on barrier nodes when analysis in-flight */}
       {viewMode === 'diagram' && isAnalyzing && (
         <div className="absolute inset-0 z-10 pointer-events-none flex items-end justify-center pb-4">
-          <span className="bg-white border border-gray-200 rounded-md px-3 py-1.5 text-xs text-gray-600 shadow animate-pulse">
+          <span className="bg-[#242836] border border-[#2E3348] rounded-md px-3 py-1.5 text-xs text-[#8B93A8] shadow-lg animate-pulse">
             Analyzing barriers...
           </span>
         </div>
@@ -169,10 +169,12 @@ export default function BowtieFlow() {
             onNodeClick={onNodeClick}
             fitView
             proOptions={{ hideAttribution: true }}
-            className="bg-gray-50"
+            className="bg-[#0F1117]"
           >
-            <Background />
-            <Controls />
+            <Background color="#2E3348" gap={20} size={1} />
+            <Controls
+              className="!bg-[#1A1D27] !border-[#2E3348] !shadow-xl [&>button]:!bg-[#1A1D27] [&>button]:!border-b-[#2E3348] [&>button:hover]:!bg-[#242836] [&>button>svg]:!fill-[#8B93A8]"
+            />
           </ReactFlow>
         </ReactFlowProvider>
       </div>

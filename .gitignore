@@ -93,3 +93,4 @@ data/models/evaluation/
 .gsd/
 .gsd-id
 .bg-shell/
+.claude/skills/

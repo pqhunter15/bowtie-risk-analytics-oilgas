@@ -129,14 +129,12 @@ export default function BarrierForm() {
           line_of_defense: b.line_of_defense,
           barrier_family: b.barrier_family,
           source_agency: SOURCE_AGENCY_DEFAULT,
-          // PIFs from context pifFlags state (Bug #2 fix)
+          // 9 active PIFs from context pifFlags state (Bug #2 fix)
+          // pif_fatigue, pif_workload, pif_time_pressure excluded from training scope
           pif_competence: pifFlags.pif_competence,
-          pif_fatigue: pifFlags.pif_fatigue,
           pif_communication: pifFlags.pif_communication,
           pif_situational_awareness: pifFlags.pif_situational_awareness,
           pif_procedures: pifFlags.pif_procedures,
-          pif_workload: pifFlags.pif_workload,
-          pif_time_pressure: pifFlags.pif_time_pressure,
           pif_tools_equipment: pifFlags.pif_tools_equipment,
           pif_safety_culture: pifFlags.pif_safety_culture,
           pif_management_of_change: pifFlags.pif_management_of_change,
@@ -191,24 +189,24 @@ export default function BarrierForm() {
   const canAnalyze = barriers.length > 0 && !isAnalyzing
 
   return (
-    <div className="w-80 overflow-y-auto border-r border-gray-200 p-4 bg-white h-full flex flex-col">
+    <div className="w-80 overflow-y-auto border-r border-[#2E3348] p-4 bg-[#1A1D27] h-full flex flex-col">
 
       {/* Event Description */}
       <div>
-        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+        <label className="block text-xs font-semibold text-[#8B93A8] uppercase tracking-wide mb-1">
           Top Event
         </label>
         <textarea
           value={eventDescription}
           onChange={(e) => setEventDescription(e.target.value)}
           placeholder="Describe the top event (e.g., Loss of containment)"
-          className="w-full rounded-md border border-gray-300 p-2 text-sm resize-none h-20 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] placeholder:text-[#5A6178] p-2 text-sm resize-none h-20 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         />
       </div>
 
       {/* Add Prevention Barrier */}
       <div className="mt-4">
-        <h3 className="text-base font-semibold mb-2">Add Prevention Barrier</h3>
+        <h3 className="text-base font-semibold mb-2 text-[#E8ECF4]">Add Prevention Barrier</h3>
 
         <input
           type="text"
@@ -216,13 +214,13 @@ export default function BarrierForm() {
           onChange={(e) => setPrevName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAddPrevention()}
           placeholder="Barrier name"
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] placeholder:text-[#5A6178] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         />
 
         <select
           value={prevType}
           onChange={(e) => setPrevType(e.target.value)}
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         >
           <option value="">Select type...</option>
           {BARRIER_TYPES.map((t) => (
@@ -235,7 +233,7 @@ export default function BarrierForm() {
         <select
           value={prevFamily}
           onChange={(e) => setPrevFamily(e.target.value)}
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         >
           <option value="">Select family...</option>
           {BARRIER_FAMILIES.map((f) => (
@@ -250,13 +248,13 @@ export default function BarrierForm() {
           value={prevRole}
           onChange={(e) => setPrevRole(e.target.value)}
           placeholder="Barrier role description"
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] placeholder:text-[#5A6178] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         />
 
         <select
           value={prevLod}
           onChange={(e) => setPrevLod(e.target.value)}
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         >
           <option value="">Select LOD...</option>
           {LINE_OF_DEFENSE.map((l) => (
@@ -268,7 +266,7 @@ export default function BarrierForm() {
 
         <button
           onClick={handleAddPrevention}
-          className="w-full rounded-md bg-gray-100 text-gray-700 py-2 text-sm font-medium hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center gap-1.5"
+          className="w-full rounded-md bg-[#242836] text-[#E8ECF4] border border-[#2E3348] py-2 text-sm font-medium hover:bg-[#2E3348] active:bg-[#3A3F52] flex items-center justify-center gap-1.5"
         >
           <Plus size={14} />
           Add Prevention Barrier
@@ -277,7 +275,7 @@ export default function BarrierForm() {
 
       {/* Add Mitigation Barrier */}
       <div className="mt-4">
-        <h3 className="text-base font-semibold mb-2">Add Mitigation Barrier</h3>
+        <h3 className="text-base font-semibold mb-2 text-[#E8ECF4]">Add Mitigation Barrier</h3>
 
         <input
           type="text"
@@ -285,13 +283,13 @@ export default function BarrierForm() {
           onChange={(e) => setMitName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAddMitigation()}
           placeholder="Barrier name"
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] placeholder:text-[#5A6178] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         />
 
         <select
           value={mitType}
           onChange={(e) => setMitType(e.target.value)}
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         >
           <option value="">Select type...</option>
           {BARRIER_TYPES.map((t) => (
@@ -304,7 +302,7 @@ export default function BarrierForm() {
         <select
           value={mitFamily}
           onChange={(e) => setMitFamily(e.target.value)}
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         >
           <option value="">Select family...</option>
           {BARRIER_FAMILIES.map((f) => (
@@ -319,13 +317,13 @@ export default function BarrierForm() {
           value={mitRole}
           onChange={(e) => setMitRole(e.target.value)}
           placeholder="Barrier role description"
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] placeholder:text-[#5A6178] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         />
 
         <select
           value={mitLod}
           onChange={(e) => setMitLod(e.target.value)}
-          className="w-full rounded-md border border-gray-300 p-2 text-sm mb-2 bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
+          className="w-full rounded-md border border-[#2E3348] bg-[#242836] text-[#E8ECF4] p-2 text-sm mb-2 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none"
         >
           <option value="">Select LOD...</option>
           {LINE_OF_DEFENSE.map((l) => (
@@ -337,7 +335,7 @@ export default function BarrierForm() {
 
         <button
           onClick={handleAddMitigation}
-          className="w-full rounded-md bg-gray-100 text-gray-700 py-2 text-sm font-medium hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center gap-1.5"
+          className="w-full rounded-md bg-[#242836] text-[#E8ECF4] border border-[#2E3348] py-2 text-sm font-medium hover:bg-[#2E3348] active:bg-[#3A3F52] flex items-center justify-center gap-1.5"
         >
           <Plus size={14} />
           Add Mitigation Barrier
@@ -347,17 +345,17 @@ export default function BarrierForm() {
       {/* Barrier List */}
       {barriers.length > 0 ? (
         <div className="mt-4">
-          <h3 className="text-base font-semibold mb-1">Barriers</h3>
+          <h3 className="text-base font-semibold mb-1 text-[#E8ECF4]">Barriers</h3>
           <div className="space-y-0.5">
             {barriers.map((b) => {
               const pred = predictions[b.id]
               return (
                 <div
                   key={b.id}
-                  className="flex items-center justify-between py-1.5 px-2 rounded text-sm hover:bg-gray-50"
+                  className="flex items-center justify-between py-1.5 px-2 rounded text-sm hover:bg-[#242836]"
                 >
-                  <span className="truncate flex-1">{b.name}</span>
-                  <span className="text-xs text-gray-400 mr-2">
+                  <span className="truncate flex-1 text-[#E8ECF4]">{b.name}</span>
+                  <span className="text-xs text-[#5A6178] mr-2">
                     {b.side === 'prevention' ? 'L' : 'R'}
                   </span>
                   {b.riskLevel && b.riskLevel !== 'unanalyzed' && (
@@ -371,7 +369,7 @@ export default function BarrierForm() {
                   )}
                   <button
                     onClick={() => removeBarrier(b.id)}
-                    className="text-gray-400 hover:text-red-500 transition-colors"
+                    className="text-[#5A6178] hover:text-red-500 transition-colors"
                     title="Remove barrier"
                     aria-label="Remove barrier"
                   >
@@ -384,8 +382,8 @@ export default function BarrierForm() {
         </div>
       ) : (
         <div className="mt-4 text-center py-6">
-          <p className="text-sm text-gray-400 font-medium">No barriers added yet</p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-sm text-[#5A6178] font-medium">No barriers added yet</p>
+          <p className="text-xs text-[#5A6178] mt-1">
             Add prevention barriers on the left to build your Bowtie diagram.
           </p>
         </div>
@@ -393,21 +391,21 @@ export default function BarrierForm() {
 
       {/* Human Factors (PIFs) */}
       <div className="mt-4">
-        <h3 className="text-base font-semibold mb-1">Human Factors</h3>
-        <p className="text-xs text-gray-400 mb-2">Check factors relevant to this scenario</p>
+        <h3 className="text-base font-semibold mb-1 text-[#E8ECF4]">Human Factors</h3>
+        <p className="text-xs text-[#5A6178] mb-2">Check factors relevant to this scenario</p>
         <div className="space-y-0.5 max-h-48 overflow-y-auto">
           {(Object.keys(PIF_DISPLAY_NAMES) as (keyof PifFlags)[]).map((key) => (
             <label
               key={key}
-              className="flex items-center gap-2 py-1 px-2 rounded text-sm hover:bg-gray-50 cursor-pointer select-none"
+              className="flex items-center gap-2 py-1 px-2 rounded text-sm hover:bg-[#242836] cursor-pointer select-none"
             >
               <input
                 type="checkbox"
                 checked={pifFlags[key] === 1}
                 onChange={() => togglePif(key)}
-                className="rounded border-gray-300 text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
+                className="rounded border-[#4A5178] bg-[#242836] text-blue-500 focus:ring-blue-400 h-3.5 w-3.5"
               />
-              <span className="text-gray-700">{PIF_DISPLAY_NAMES[key]}</span>
+              <span className="text-[#E8ECF4]">{PIF_DISPLAY_NAMES[key]}</span>
             </label>
           ))}
         </div>
@@ -443,7 +441,7 @@ export default function BarrierForm() {
         ) : (
           <button
             disabled
-            className="w-full rounded-md bg-gray-300 text-gray-400 py-2.5 text-sm font-medium cursor-not-allowed"
+            className="w-full rounded-md bg-[#242836] text-[#5A6178] py-2.5 text-sm font-medium cursor-not-allowed"
             title="Add at least one barrier to analyze."
           >
             Analyze Barriers
@@ -453,7 +451,7 @@ export default function BarrierForm() {
         {/* New Scenario button */}
         <button
           onClick={handleNewScenario}
-          className="w-full rounded-md border border-gray-300 text-gray-600 py-2 text-sm hover:bg-gray-50"
+          className="w-full rounded-md border border-[#2E3348] text-[#8B93A8] py-2 text-sm hover:bg-[#242836]"
         >
           New Scenario
         </button>
@@ -461,7 +459,7 @@ export default function BarrierForm() {
 
       {/* Error toast — fixed bottom-right per UI-SPEC Interaction States */}
       {analysisError && (
-        <div className="fixed bottom-4 right-4 bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-700 shadow z-50">
+        <div className="fixed bottom-4 right-4 bg-red-950 border border-red-800 rounded-md p-3 text-sm text-red-300 shadow z-50">
           <div className="flex items-center gap-2">
             <AlertCircle size={16} />
             <span>{analysisError}</span>

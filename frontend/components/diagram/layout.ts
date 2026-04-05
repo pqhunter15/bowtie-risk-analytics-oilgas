@@ -76,12 +76,16 @@ export function buildDagreLayout(
     }
   })
 
-  // Edges
+  // Edges — prevention (indigo) flows left→center, mitigation (orange) flows center→right
   const edges: Edge[] = barriers.map((b) => ({
     id: `e-${b.id}`,
     source: b.side === 'prevention' ? b.id : topEventId,
     target: b.side === 'prevention' ? topEventId : b.id,
     type: 'smoothstep',
+    style: {
+      stroke: b.side === 'prevention' ? '#6366F1' : '#F97316',
+      strokeWidth: 2,
+    },
   }))
 
   return {

@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useBowtieContext } from '@/context/BowtieContext'
 import RiskScoreBadge from './RiskScoreBadge'
 import ShapWaterfall from './ShapWaterfall'
@@ -8,6 +9,10 @@ import EvidenceSection from './EvidenceSection'
 // ---------------------------------------------------------------------------
 // Static display names for barrier-category SHAP features (not in degradation_factors)
 // ---------------------------------------------------------------------------
+
+/** Incident-level features that are non-actionable for user-submitted barriers.
+ *  Filtered out before passing SHAP arrays to the waterfall chart. */
+const SHAP_HIDDEN_FEATURES = new Set(['source_agency', 'primary_threat_category'])
 
 /** Barrier-category features come from the model but are not mapped via degradation_factors.
  *  These names match the feature_names.json 'barrier' category entries. */
@@ -21,29 +26,30 @@ const BARRIER_FEATURE_DISPLAY_NAMES: Record<string, string> = {
 }
 
 // ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'shap', label: 'SHAP Analysis' },
+  { id: 'evidence', label: 'Evidence' },
+] as const
+
+type TabId = (typeof TABS)[number]['id']
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-/**
- * Right-side detail panel — orchestrates risk score badge, SHAP waterfall,
- * and evidence section for the selected barrier.
- *
- * Reads selectedBarrierId, barriers, predictions, and eventDescription from
- * BowtieContext. Evidence loading is delegated to EvidenceSection.
- *
- * States:
- * 1. No barrier selected → empty state copy
- * 2. Barrier selected but no prediction → prompt to analyze
- * 3. Barrier selected with prediction → full analysis view
- */
 export default function DetailPanel() {
   const { selectedBarrierId, barriers, predictions, eventDescription } = useBowtieContext()
+  const [activeTab, setActiveTab] = useState<TabId>('overview')
 
   // State 1: No barrier selected
   if (!selectedBarrierId) {
     return (
       <div className="h-full flex items-start pt-8 justify-center">
-        <p className="text-sm text-gray-400 text-center px-4">
+        <p className="text-sm text-[#5A6178] text-center px-4">
           Click a barrier node to see its risk analysis.
         </p>
       </div>
@@ -52,11 +58,10 @@ export default function DetailPanel() {
 
   const barrier = barriers.find((b) => b.id === selectedBarrierId)
 
-  // Barrier not found in list (edge case: removed while selected)
   if (!barrier) {
     return (
       <div className="h-full flex items-start pt-8 justify-center">
-        <p className="text-sm text-gray-400 text-center px-4">
+        <p className="text-sm text-[#5A6178] text-center px-4">
           Click a barrier node to see its risk analysis.
         </p>
       </div>
@@ -69,7 +74,7 @@ export default function DetailPanel() {
   if (!pred) {
     return (
       <div className="h-full flex items-start pt-8 justify-center">
-        <p className="text-sm text-gray-400 text-center px-4">
+        <p className="text-sm text-[#5A6178] text-center px-4">
           Run Analyze Barriers to see risk analysis for this barrier.
         </p>
       </div>
@@ -79,8 +84,6 @@ export default function DetailPanel() {
   // State 3: Full analysis view
   const hasModel2 = pred.model2_shap && pred.model2_shap.length > 0
 
-  // Build feature display name map: barrier features (static) + PIF features (dynamic from API)
-  // Barrier features are not in degradation_factors (API only emits incident_context category)
   const featureDisplayNames: Record<string, string> = { ...BARRIER_FEATURE_DISPLAY_NAMES }
   if (pred.degradation_factors) {
     for (const df of pred.degradation_factors) {
@@ -88,61 +91,135 @@ export default function DetailPanel() {
     }
   }
 
+  // Build overview factor summary from visible SHAP values
+  const visibleShap = pred.model1_shap.filter((s) => !SHAP_HIDDEN_FEATURES.has(s.feature))
+  const topFactors = [...visibleShap]
+    .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+    .slice(0, 5)
+
   return (
-    <div className="space-y-1">
-      {/* Barrier identity */}
-      <h2 className="text-xl font-semibold mb-1">{barrier.name}</h2>
-      <p className="text-sm text-gray-500 mb-3">{barrier.barrierRole}</p>
+    <div className="flex flex-col h-full">
+      {/* Barrier identity — always visible above tabs */}
+      <div className="pb-3">
+        <h2 className="text-xl font-semibold mb-1 text-[#E8ECF4]">{barrier.name}</h2>
+        <p className="text-sm text-[#8B93A8] mb-3">{barrier.barrierRole}</p>
 
-      {/* Barrier classification metadata (Bug #4 fix) */}
-      {(pred.barrier_type_display || pred.lod_display) && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {pred.barrier_type_display && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-              {pred.barrier_type_display}
-            </span>
-          )}
-          {pred.lod_display && (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-              {pred.lod_display}
-            </span>
-          )}
-        </div>
-      )}
+        {(pred.barrier_type_display || pred.lod_display) && (
+          <div className="flex flex-wrap gap-2">
+            {pred.barrier_type_display && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#242836] border border-[#2E3348] text-[#8B93A8]">
+                {pred.barrier_type_display}
+              </span>
+            )}
+            {pred.lod_display && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#242836] border border-[#2E3348] text-[#8B93A8]">
+                {pred.lod_display}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
-      {/* Risk score badge */}
-      <RiskScoreBadge
-        probability={pred.model1_probability}
-        riskLevel={barrier.riskLevel}
-      />
+      {/* Tab bar */}
+      <div className="flex bg-[#242836] rounded-t-md border-b border-[#2E3348] flex-shrink-0">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+              activeTab === tab.id
+                ? 'text-[#E8ECF4] border-b-2 border-[#3B82F6]'
+                : 'text-[#5A6178] hover:text-[#8B93A8]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      {/* Model 1 SHAP waterfall — primary risk factors */}
-      <ShapWaterfall
-        shap={pred.model1_shap}
-        baseValue={pred.model1_base_value}
-        featureDisplayNames={featureDisplayNames}
-      />
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto pt-4">
+        {/* Overview tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-4">
+            <RiskScoreBadge
+              probability={pred.model1_probability}
+              riskLevel={barrier.riskLevel}
+            />
 
-      {/* Model 2 SHAP waterfall — human factor sensitivity (SHAP-03: separate section) */}
-      {hasModel2 && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <h3 className="text-base font-semibold mb-2">Human Factor Sensitivity</h3>
-          <ShapWaterfall
-            shap={pred.model2_shap}
-            baseValue={pred.model2_base_value}
-            featureDisplayNames={featureDisplayNames}
+            <div>
+              <h3 className="text-base font-semibold mb-1 text-[#E8ECF4]">Barrier Analysis Factors</h3>
+              <p className="text-xs text-[#8B93A8] mb-3">
+                Base rate: {pred.model1_base_value.toFixed(3)}
+              </p>
+
+              {topFactors.length > 0 && (
+                <div className="space-y-1.5">
+                  {topFactors.map((s) => {
+                    const name = featureDisplayNames[s.feature] ?? s.feature
+                    const isRisk = s.value >= 0
+                    return (
+                      <div
+                        key={s.feature}
+                        className="flex items-center justify-between text-xs px-2 py-1.5 rounded bg-[#242836]"
+                      >
+                        <span className="text-[#E8ECF4] truncate mr-2">{name}</span>
+                        <span className={isRisk ? 'text-red-400' : 'text-blue-400'}>
+                          {isRisk ? '+' : ''}{s.value.toFixed(3)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {pred.degradation_factors && pred.degradation_factors.length > 0 && (
+                <p className="text-xs text-[#8B93A8] mt-3">
+                  Primary degradation factors:{' '}
+                  {pred.degradation_factors
+                    .filter((df) => !SHAP_HIDDEN_FEATURES.has(df.source_feature))
+                    .slice(0, 3)
+                    .map((df) => df.factor)
+                    .join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SHAP Analysis tab */}
+        {activeTab === 'shap' && (
+          <div className="space-y-1">
+            <ShapWaterfall
+              shap={pred.model1_shap}
+              baseValue={pred.model1_base_value}
+              featureDisplayNames={featureDisplayNames}
+              hiddenFeatures={SHAP_HIDDEN_FEATURES}
+            />
+
+            {hasModel2 && (
+              <div className="mt-4 pt-4 border-t border-[#2E3348]">
+                <h3 className="text-base font-semibold mb-2 text-[#E8ECF4]">Human Factor Sensitivity</h3>
+                <ShapWaterfall
+                  shap={pred.model2_shap}
+                  baseValue={pred.model2_base_value}
+                  featureDisplayNames={featureDisplayNames}
+                  hiddenFeatures={SHAP_HIDDEN_FEATURES}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Evidence tab */}
+        {activeTab === 'evidence' && (
+          <EvidenceSection
+            barrierId={barrier.id}
+            barrier={barrier}
+            eventDescription={eventDescription}
+            prediction={pred}
           />
-        </div>
-      )}
-
-      {/* Evidence section — loads on-demand (D-15) */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <EvidenceSection
-          barrierId={barrier.id}
-          barrier={barrier}
-          eventDescription={eventDescription}
-          prediction={pred}
-        />
+        )}
       </div>
     </div>
   )
