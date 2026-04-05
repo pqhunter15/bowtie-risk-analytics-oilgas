@@ -90,3 +90,6 @@ data/text/
 data/derived/
 data/models/artifacts/
 data/models/evaluation/
+.gsd/
+.gsd-id
+.bg-shell/

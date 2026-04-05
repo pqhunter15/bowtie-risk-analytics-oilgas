@@ -1,6 +1,6 @@
 # Bowtie Risk Analytics
 
-Python pipeline, RAG retrieval system, and Streamlit dashboard for analyzing oil & gas incidents using the Bowtie risk methodology. Ingests public incident reports (CSB, BSEE), extracts structured risk data via LLM, retrieves similar barrier failures via hybrid semantic search, and calculates barrier coverage metrics. Current scope: **Loss of Containment** scenarios.
+Python pipeline, RAG retrieval system, ML modeling layer, FastAPI service, and Next.js dashboard for analyzing oil & gas incidents using the Bowtie risk methodology. Ingests public incident reports (CSB, BSEE), extracts structured risk data via LLM, predicts barrier failure probability with SHAP explainability, retrieves similar barrier failures via hybrid semantic search, and surfaces results through an interactive Bowtie diagram. Current scope: **Loss of Containment** scenarios.
 
 ## RAG Retrieval System
 
@@ -94,11 +94,87 @@ Results are written to `data/evaluation/results/evaluation_results.json`. See th
 | [Phase-2 Evaluation Report](docs/reports/rag_phase2_evaluation.md) | Quantitative results and recommendation |
 | [Implementation Audit](docs/reports/rag_phase2_implementation_audit.md) | Design compliance and code quality review |
 
+## ML Modeling
+
+XGBoost + Logistic Regression models predict barrier failure probability from 18 engineered features. Two prediction targets:
+
+- **Model 1** (`label_barrier_failed`): Did the barrier fail to perform? XGBoost F1=0.928 ±0.019 (5-fold GroupKFold CV).
+- **Model 2** (`label_barrier_failed_human`): Did the barrier fail *and* human factors contributed? XGBoost F1=0.348 ±0.060.
+- **Model 3** (barrier condition, 3-class): XGBoost macro F1=0.588. Separates effective / degraded / ineffective barrier states.
+
+**Features:** 5 categorical (side, barrier_type, line_of_defense, barrier_family, source_agency) + 12 PIF boolean indicators + supporting_text_count. OrdinalEncoder with unknown=-1 for unseen categories. GroupKFold on `incident_id` prevents PIF leakage (PIFs are incident-level, broadcast to all controls in the incident).
+
+**SHAP explainability:** `TreeExplainer` per model with 200-sample background arrays. Per-barrier reason codes returned by `POST /predict`. Top factors mapped to process safety display names via `configs/mappings/pif_to_degradation.yaml`.
+
+**Reproduce artifacts (4-step process):**
+
+```bash
+python -m src.modeling.feature_engineering   # → data/models/artifacts/feature_matrix.parquet
+python -m src.modeling.train                 # → xgb_model*.json, logreg_*.joblib
+python -m src.modeling.explain               # → shap_background_*.npy, pif_ablation_report.json
+python scripts/generate_risk_thresholds.py   # → risk_thresholds.json (p60/p80 cutoffs)
+```
+
+All model artifacts are gitignored. See [EVALUATION.md](EVALUATION.md) for full metrics.
+
+## FastAPI Server
+
+A production FastAPI service (`src/api/main.py`) serves ML predictions and RAG evidence narratives. All resources (XGBoost models, SHAP TreeExplainers, RAG index, mapping configs) are loaded once at startup via the async lifespan context and stored on `app.state`.
+
+**Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/predict` | Barrier failure probability + SHAP reason codes for both models. Accepts 18-field feature dict; returns probabilities, SHAP lists, risk level (H/M/L), and degradation factors. |
+| `POST` | `/explain` | RAG evidence narrative for a barrier. Retrieves similar historical failures, applies confidence gate (barrier_sim_score ≥ 0.25), then calls Claude Haiku for a narrative + recommendations. Runs in `asyncio.to_thread()` to avoid blocking the event loop. |
+| `GET` | `/health` | Service health: loaded model info, RAG corpus size, uptime. |
+
+**Start locally:**
+
+```bash
+uvicorn src.api.main:app --reload --port 8000
+```
+
+Interactive docs at `http://localhost:8000/docs`.
+
+**Testing without model artifacts:** Pass `lifespan_override` to `create_app()` to inject mocked resources — no real models needed.
+
+## Next.js Frontend
+
+A Next.js 15 App Router dashboard (`frontend/`) visualizes barrier risk predictions on an interactive Bowtie diagram.
+
+**Layout:**
+
+```
+┌──────────────┬──────────────────────────┬──────────────────┐
+│ Sidebar      │ Bowtie Diagram           │ Detail Panel     │
+│ BarrierForm  │ React Flow (nodeTypes at │ Prediction score │
+│ Add barriers │ module scope — required) │ SHAP waterfall   │
+│ Event desc.  │ Prevention | Top Event   │ RAG evidence     │
+│              │          | Mitigation   │ Citations        │
+└──────────────┴──────────────────────────┴──────────────────┘
+```
+
+**Run locally:**
+
+```bash
+cd frontend
+npm install
+npm run dev      # http://localhost:3000
+npm test         # vitest (10 tests)
+```
+
+**Key constraints:**
+- Tailwind CSS v3 (v4 requires Node 20+; project targets Node 18)
+- vitest@2.1.9 pinned (vitest v4 requires Node 20+)
+- `nodeTypes` must be defined at module scope in React Flow components — component-scope definition causes infinite re-renders
+- `frontend/lib/` must be force-added to git: `git add -f frontend/lib/` (root `.gitignore` has a `lib/` pattern)
+
 ## Quickstart
 
 ```bash
 # 1. Create virtual environment
-python -m venv venv && source venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 
 # 2. Install dependencies
 pip install -r requirements.txt
@@ -230,7 +306,7 @@ docs/
   meetings/        Meeting notes
   handoff/         Historical planning documents
 
-tests/             Unit tests (pytest, 362 passing)
+tests/             Unit tests (pytest, 469+ passing)
 scripts/           Standalone analytics CLI + evaluation harness
 ```
 
