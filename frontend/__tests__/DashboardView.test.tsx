@@ -76,4 +76,14 @@ describe('DashboardView', () => {
     // Executive Summary is the default tab
     expect(screen.getByTestId('top-at-risk-barriers')).toBeTruthy()
   })
+
+  it('executive-summary tab shows model KPIs component', () => {
+    renderDashboard()
+    expect(screen.getByTestId('model-kpis')).toBeTruthy()
+  })
+
+  it('executive-summary tab shows scenario context component', () => {
+    renderDashboard()
+    expect(screen.getByTestId('scenario-context')).toBeTruthy()
+  })
 })

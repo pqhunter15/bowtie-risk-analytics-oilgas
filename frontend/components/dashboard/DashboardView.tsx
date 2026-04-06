@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useBowtieContext } from '@/context/BowtieContext'
 import RiskDistributionChart, { buildRiskDistribution } from './RiskDistributionChart'
 import TopAtRiskBarriers from './TopAtRiskBarriers'
+import ModelKPIs from './ModelKPIs'
+import ScenarioContext from './ScenarioContext'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -54,6 +56,12 @@ export default function DashboardView() {
             <RiskDistributionChart counts={counts} />
             <div className="mt-6">
               <TopAtRiskBarriers />
+            </div>
+            <div className="mt-6">
+              <ModelKPIs />
+            </div>
+            <div className="mt-6">
+              <ScenarioContext />
             </div>
           </>
         )}
