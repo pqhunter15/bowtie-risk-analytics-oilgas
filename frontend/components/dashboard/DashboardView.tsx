@@ -1,13 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import { useBowtieContext } from '@/context/BowtieContext'
+import RiskDistributionChart, { buildRiskDistribution } from './RiskDistributionChart'
 
 // ---------------------------------------------------------------------------
 // Tabs
 // ---------------------------------------------------------------------------
 
 const TABS = [
-  { id: 'fleet-overview', label: 'Fleet Overview' },
+  { id: 'executive-summary', label: 'Executive Summary' },
   { id: 'barrier-coverage', label: 'Barrier Coverage' },
   { id: 'incident-trends', label: 'Incident Trends' },
   { id: 'risk-matrix', label: 'Risk Matrix' },
@@ -20,7 +22,10 @@ type TabId = (typeof TABS)[number]['id']
 // ---------------------------------------------------------------------------
 
 export default function DashboardView() {
-  const [activeTab, setActiveTab] = useState<TabId>('fleet-overview')
+  const [activeTab, setActiveTab] = useState<TabId>('executive-summary')
+  const { barriers } = useBowtieContext()
+
+  const counts = buildRiskDistribution(barriers)
 
   return (
     <div className="w-full bg-[#0F1117] min-h-screen flex flex-col">
@@ -42,13 +47,16 @@ export default function DashboardView() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 flex items-center justify-center p-8">
-        {TABS.map((tab) =>
-          activeTab === tab.id ? (
-            <p key={tab.id} className="text-sm text-[#5A6178]">
-              {tab.label} coming soon
+      <div className="flex-1 p-8">
+        {activeTab === 'executive-summary' && (
+          <RiskDistributionChart counts={counts} />
+        )}
+        {activeTab !== 'executive-summary' && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-[#5A6178]">
+              {TABS.find((t) => t.id === activeTab)?.label} coming soon
             </p>
-          ) : null
+          </div>
         )}
       </div>
     </div>
