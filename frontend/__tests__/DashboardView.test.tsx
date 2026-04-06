@@ -14,6 +14,14 @@ vi.mock('@/hooks/useAnalyzeBarriers', () => ({
   useAnalyzeBarriers: () => ({ analyzeAll: mockAnalyzeAll }),
 }))
 
+// Mock fetchAprioriRules so the AprioriRulesTable inside Drivers & HF tab
+// doesn't make real network calls during DashboardView tests.
+const mockFetchAprioriRules = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual('@/lib/api')
+  return { ...actual, fetchAprioriRules: mockFetchAprioriRules }
+})
+
 // Import component AFTER vi.mock so the mock is applied
 import DashboardView from '@/components/dashboard/DashboardView'
 
@@ -21,7 +29,7 @@ import DashboardView from '@/components/dashboard/DashboardView'
 // Test helpers
 // ---------------------------------------------------------------------------
 
-const TAB_LABELS = ['Executive Summary', 'Barrier Coverage', 'Incident Trends', 'Risk Matrix']
+const TAB_LABELS = ['Executive Summary', 'Barrier Coverage', 'Incident Trends', 'Risk Matrix', 'Drivers & HF']
 
 type BarrierDef = Omit<Barrier, 'id' | 'riskLevel'>
 
@@ -108,12 +116,13 @@ function renderDashboard() {
 describe('DashboardView', () => {
   beforeEach(() => {
     mockAnalyzeAll.mockClear()
+    mockFetchAprioriRules.mockResolvedValue([])
   })
 
-  it('renders all 4 tab buttons with correct labels', () => {
+  it('renders all 5 tab buttons with correct labels', () => {
     renderDashboard()
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(4)
+    expect(buttons).toHaveLength(5)
     for (const label of TAB_LABELS) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
     }
@@ -139,9 +148,9 @@ describe('DashboardView', () => {
     expect(screen.getByText('Barrier Coverage coming soon')).toBeTruthy()
   })
 
-  it('each non-Executive-Summary tab shows the correct coming soon content', () => {
+  it('each non-Executive-Summary, non-DriversHF tab shows the correct coming soon content', () => {
     renderDashboard()
-    const comingSoonTabs = TAB_LABELS.filter((l) => l !== 'Executive Summary')
+    const comingSoonTabs = TAB_LABELS.filter((l) => l !== 'Executive Summary' && l !== 'Drivers & HF')
     for (const label of comingSoonTabs) {
       fireEvent.click(screen.getByRole('button', { name: label }))
       expect(screen.getByText(`${label} coming soon`)).toBeTruthy()
@@ -158,10 +167,56 @@ describe('DashboardView', () => {
     expect(screen.queryByText('Risk Matrix coming soon')).toBeNull()
   })
 
+  it('clicking Drivers & HF renders GlobalShapChart and PifPrevalenceChart', async () => {
+    await act(async () => {
+      renderDashboard()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Drivers & HF' }))
+    expect(screen.getByTestId('global-shap-chart')).toBeTruthy()
+    expect(screen.getByTestId('pif-prevalence-chart')).toBeTruthy()
+  })
+
+  it('clicking Drivers & HF renders AprioriRulesTable once data loads', async () => {
+    await act(async () => {
+      renderDashboard()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Drivers & HF' }))
+    // findByTestId waits for async state (fetchAprioriRules resolves) to settle
+    const table = await screen.findByTestId('apriori-rules-table')
+    expect(table).toBeTruthy()
+  })
+
+  it('clicking Drivers & HF does not show coming soon for that tab', async () => {
+    await act(async () => {
+      renderDashboard()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Drivers & HF' }))
+    expect(screen.queryByText('Drivers & HF coming soon')).toBeNull()
+  })
+
+  it('Drivers & HF tab is active when clicked', () => {
+    renderDashboard()
+    const driversBtn = screen.getByRole('button', { name: 'Drivers & HF' })
+    fireEvent.click(driversBtn)
+    expect(driversBtn.className).toContain('border-[#3B82F6]')
+  })
+
+  it('switching away from Drivers & HF to Barrier Coverage shows coming soon', async () => {
+    await act(async () => {
+      renderDashboard()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Drivers & HF' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Barrier Coverage' }))
+    })
+    expect(screen.getByText('Barrier Coverage coming soon')).toBeTruthy()
+    expect(screen.queryByTestId('global-shap-chart')).toBeNull()
+  })
+
   it('inactive tabs have the inactive text colour class', () => {
     renderDashboard()
-    // With Executive Summary active, the other three should carry the inactive colour
-    for (const label of ['Barrier Coverage', 'Incident Trends', 'Risk Matrix']) {
+    // With Executive Summary active, the other four should carry the inactive colour
+    for (const label of ['Barrier Coverage', 'Incident Trends', 'Risk Matrix', 'Drivers & HF']) {
       const btn = screen.getByRole('button', { name: label })
       expect(btn.className).toContain('text-[#5A6178]')
     }
@@ -191,6 +246,7 @@ describe('DashboardView', () => {
 describe('DashboardView auto-batch', () => {
   beforeEach(() => {
     mockAnalyzeAll.mockClear()
+    mockFetchAprioriRules.mockResolvedValue([])
   })
 
   it('calls analyzeAll when barriers exist without predictions', async () => {
