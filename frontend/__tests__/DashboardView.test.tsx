@@ -70,4 +70,10 @@ describe('DashboardView', () => {
       expect(btn.className).toContain('text-[#5A6178]')
     }
   })
+
+  it('executive-summary tab shows top-at-risk-barriers component', () => {
+    renderDashboard()
+    // Executive Summary is the default tab
+    expect(screen.getByTestId('top-at-risk-barriers')).toBeTruthy()
+  })
 })

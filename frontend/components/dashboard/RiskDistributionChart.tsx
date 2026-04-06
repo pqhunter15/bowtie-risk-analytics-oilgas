@@ -77,7 +77,12 @@ export default function RiskDistributionChart({ counts }: RiskDistributionChartP
             }}
             labelStyle={{ color: '#E8ECF4' }}
             itemStyle={{ color: '#8B93A8' }}
-            formatter={(val: number) => [val, 'Barriers']}
+            formatter={(val, name) => {
+              if (name === 'count' && typeof val === 'number') {
+                return [val, 'Barriers']
+              }
+              return ['', '']
+            }}
           />
           <Bar dataKey="count" isAnimationActive={false}>
             {data.map((entry, i) => (

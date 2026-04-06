@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useBowtieContext } from '@/context/BowtieContext'
 import RiskDistributionChart, { buildRiskDistribution } from './RiskDistributionChart'
+import TopAtRiskBarriers from './TopAtRiskBarriers'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -49,7 +50,12 @@ export default function DashboardView() {
       {/* Tab content */}
       <div className="flex-1 p-8">
         {activeTab === 'executive-summary' && (
-          <RiskDistributionChart counts={counts} />
+          <>
+            <RiskDistributionChart counts={counts} />
+            <div className="mt-6">
+              <TopAtRiskBarriers />
+            </div>
+          </>
         )}
         {activeTab !== 'executive-summary' && (
           <div className="flex items-center justify-center h-full">
