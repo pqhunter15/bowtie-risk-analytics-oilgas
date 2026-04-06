@@ -49,17 +49,19 @@ export function BowtieProvider({
   initialPredictions = {},
   initialViewMode = 'diagram',
   initialDashboardTab = null,
+  initialSelectedBarrierId = null,
 }: {
   children: ReactNode
   initialBarriers?: Barrier[]
   initialPredictions?: Record<string, PredictResponse>
   initialViewMode?: 'diagram' | 'pathway' | 'dashboard'
   initialDashboardTab?: string | null
+  initialSelectedBarrierId?: string | null
 }) {
   const [eventDescription, setEventDescription] = useState<string>('')
   const [barriers, setBarriers] = useState<Barrier[]>(initialBarriers)
   const [predictions, setPredictions] = useState<Record<string, PredictResponse>>(initialPredictions)
-  const [selectedBarrierId, setSelectedBarrierId] = useState<string | null>(null)
+  const [selectedBarrierId, setSelectedBarrierId] = useState<string | null>(initialSelectedBarrierId)
   const [evidenceMap, setEvidenceMap] = useState<Record<string, ExplainResponse>>({})
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
