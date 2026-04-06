@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { useBowtieContext } from '@/context/BowtieContext'
 import { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES } from './TopAtRiskBarriers'
 import RiskScoreBadge from '@/components/panel/RiskScoreBadge'
@@ -153,10 +153,15 @@ const COLUMNS: Column[] = [
 // ---------------------------------------------------------------------------
 
 export default function RankedBarriers() {
-  const { barriers, predictions, setSelectedBarrierId, eventDescription } = useBowtieContext()
+  const { barriers, predictions, setSelectedBarrierId, selectedBarrierId, setViewMode, eventDescription } = useBowtieContext()
   const [sortKey, setSortKey] = useState<keyof RankedRow>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
+
+  // Auto-expand the selected barrier row on mount (e.g. arriving from "View Full Analysis")
+  useEffect(() => {
+    if (selectedBarrierId) setExpandedRowId(selectedBarrierId)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const [showEvidence, setShowEvidence] = useState<Record<string, boolean>>({})
   const [filterSide, setFilterSide] = useState<string>('all')
   const [filterRiskLevel, setFilterRiskLevel] = useState<string>('all')
@@ -357,6 +362,20 @@ export default function RankedBarriers() {
                               Load Evidence
                             </button>
                           )}
+                        </div>
+
+                        {/* Cross-link navigation */}
+                        <div className="mt-3 border-t border-[#2E3348] pt-3">
+                          <button
+                            data-testid="view-on-diagram-btn"
+                            className="px-3 py-1.5 text-xs bg-[#242836] border border-[#2E3348] text-[#8B93A8] hover:text-[#E8ECF4] rounded-md transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setViewMode('diagram')
+                            }}
+                          >
+                            View on Diagram
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -42,7 +42,7 @@ type TabId = (typeof TABS)[number]['id']
 // ---------------------------------------------------------------------------
 
 export default function DetailPanel() {
-  const { selectedBarrierId, barriers, predictions, eventDescription } = useBowtieContext()
+  const { selectedBarrierId, barriers, predictions, eventDescription, setViewMode, setDashboardTab } = useBowtieContext()
   const [activeTab, setActiveTab] = useState<TabId>('overview')
 
   // State 1: No barrier selected
@@ -118,6 +118,19 @@ export default function DetailPanel() {
             )}
           </div>
         )}
+
+        {/* Cross-link navigation — only when analysis is available */}
+        <button
+          data-testid="view-full-analysis-btn"
+          className="mt-3 px-3 py-1.5 text-xs bg-[#242836] border border-[#2E3348] text-[#8B93A8] hover:text-[#E8ECF4] rounded-md transition-colors"
+          onClick={() => {
+            setViewMode('dashboard')
+            setDashboardTab('ranked-barriers')
+            // selectedBarrierId already set — redundant but ensures it persists
+          }}
+        >
+          View Full Analysis
+        </button>
       </div>
 
       {/* Tab bar */}

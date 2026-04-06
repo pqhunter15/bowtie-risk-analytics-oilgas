@@ -31,7 +31,15 @@ type TabId = (typeof TABS)[number]['id']
 
 export default function DashboardView() {
   const [activeTab, setActiveTab] = useState<TabId>('executive-summary')
-  const { barriers, predictions, isAnalyzing } = useBowtieContext()
+  const { barriers, predictions, isAnalyzing, dashboardTab, setDashboardTab } = useBowtieContext()
+
+  // Consume dashboardTab from context: switch active tab then clear to avoid re-triggering
+  useEffect(() => {
+    if (dashboardTab) {
+      setActiveTab(dashboardTab as TabId)
+      setDashboardTab(null)
+    }
+  }, [dashboardTab, setDashboardTab])
   const { analyzeAll } = useAnalyzeBarriers()
 
   const autoTriggered = useRef(false)
