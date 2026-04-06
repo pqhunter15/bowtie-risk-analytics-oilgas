@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Cell, Tooltip, ResponsiveContainer } from 
 import { useBowtieContext } from '@/context/BowtieContext'
 import { CHART_COLORS } from '@/lib/chart-colors'
 import { PIF_DISPLAY_NAMES } from '@/lib/types'
-import type { PredictResponse } from '@/lib/types'
+import type { PifFlags, PredictResponse } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -140,6 +140,141 @@ export default function GlobalShapChart() {
                 <Cell
                   key={i}
                   fill={entry.category === 'barrier' ? CHART_COLORS.cat1 : CHART_COLORS.cat2}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PIF Prevalence Chart
+// ---------------------------------------------------------------------------
+
+/** Maps each PIF key to its human-factors category. */
+export const PIF_CATEGORY: Record<keyof PifFlags, 'People' | 'Work' | 'Organisation'> = {
+  pif_competence: 'People',
+  pif_communication: 'People',
+  pif_situational_awareness: 'People',
+  pif_supervision: 'People',
+  pif_training: 'People',
+  pif_procedures: 'Work',
+  pif_tools_equipment: 'Work',
+  pif_safety_culture: 'Organisation',
+  pif_management_of_change: 'Organisation',
+}
+
+/** Bar fill colors per HF category. */
+export const CATEGORY_COLORS: Record<'People' | 'Work' | 'Organisation', string> = {
+  People: CHART_COLORS.cat3,        // #F5B740 amber
+  Work: CHART_COLORS.cat4,          // #8B5CF6 purple
+  Organisation: CHART_COLORS.cat5,  // #F97316 orange
+}
+
+export interface PifPrevalenceEntry {
+  feature: string
+  featureKey: string
+  prevalence: number
+  category: 'People' | 'Work' | 'Organisation'
+}
+
+/**
+ * Compute how often each PIF is a top-3 SHAP driver (by |value|) across all
+ * predictions. Returns all 9 PIF keys, sorted descending by prevalence.
+ *
+ * @param predictions - Map of barrierId → PredictResponse from BowtieContext.
+ */
+export function buildPifPrevalenceData(
+  predictions: Record<string, PredictResponse>,
+): PifPrevalenceEntry[] {
+  const values = Object.values(predictions)
+  if (values.length === 0) return []
+
+  const counts: Partial<Record<keyof PifFlags, number>> = {}
+
+  for (const pred of values) {
+    // Sort all SHAP entries by |value| descending and take the top 3
+    const top3 = [...(pred.model1_shap ?? [])]
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, 3)
+
+    for (const entry of top3) {
+      if (entry.feature.startsWith('pif_') && entry.feature in PIF_CATEGORY) {
+        const key = entry.feature as keyof PifFlags
+        counts[key] = (counts[key] ?? 0) + 1
+      }
+    }
+  }
+
+  const total = values.length
+  const pifKeys = Object.keys(PIF_DISPLAY_NAMES) as Array<keyof PifFlags>
+
+  const result: PifPrevalenceEntry[] = pifKeys.map((key) => ({
+    feature: PIF_DISPLAY_NAMES[key],
+    featureKey: key,
+    prevalence: (counts[key] ?? 0) / total,
+    category: PIF_CATEGORY[key],
+  }))
+
+  return result.sort((a, b) => b.prevalence - a.prevalence)
+}
+
+/** Horizontal bar chart showing PIF prevalence in top-3 SHAP drivers. */
+export function PifPrevalenceChart() {
+  const { predictions } = useBowtieContext()
+  const data = buildPifPrevalenceData(predictions)
+
+  return (
+    <div data-testid="pif-prevalence-chart">
+      <h3 className="text-base font-semibold mb-3 text-[#E8ECF4]">PIF Prevalence in Top Drivers</h3>
+
+      {data.length === 0 ? (
+        <p className="text-sm text-[#5A6178]">
+          Run Analyze Barriers to see PIF prevalence
+        </p>
+      ) : (
+        <ResponsiveContainer width="100%" height={Math.max(200, data.length * 32 + 60)}>
+          <BarChart
+            layout="vertical"
+            data={data}
+            margin={{ top: 4, right: 24, bottom: 4, left: 0 }}
+          >
+            <XAxis
+              type="number"
+              tickFormatter={(v) => `${((v as number) * 100).toFixed(0)}%`}
+              tick={{ fontSize: 12, fill: '#8B93A8' }}
+              stroke="#2E3348"
+            />
+            <YAxis
+              type="category"
+              dataKey="feature"
+              width={160}
+              tick={{ fontSize: 12, fill: '#8B93A8' }}
+              stroke="#2E3348"
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#1A1D27',
+                border: '1px solid #2E3348',
+                borderRadius: '6px',
+              }}
+              labelStyle={{ color: '#E8ECF4' }}
+              itemStyle={{ color: '#8B93A8' }}
+              formatter={(val, name) => {
+                if (name === 'prevalence' && typeof val === 'number') {
+                  return [`${(val * 100).toFixed(1)}%`, 'Prevalence']
+                }
+                return ['', '']
+              }}
+            />
+            <Bar dataKey="prevalence" isAnimationActive={false}>
+              {data.map((entry, i) => (
+                <Cell
+                  key={i}
+                  fill={CATEGORY_COLORS[entry.category]}
                 />
               ))}
             </Bar>
