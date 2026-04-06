@@ -15,7 +15,7 @@ export const SHAP_HIDDEN_FEATURES = new Set(['source_agency', 'primary_threat_ca
 
 /** Display names for barrier-category SHAP features (mirrors BARRIER_FEATURE_DISPLAY_NAMES
  *  in DetailPanel.tsx) merged with PIF display names from lib/types.ts. */
-const FEATURE_DISPLAY_NAMES: Record<string, string> = {
+export const FEATURE_DISPLAY_NAMES: Record<string, string> = {
   // Barrier-category features
   source_agency: 'Data Source',
   barrier_family: 'Barrier Family',

@@ -1,0 +1,263 @@
+'use client'
+
+import { useState } from 'react'
+import { useBowtieContext } from '@/context/BowtieContext'
+import { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES } from './TopAtRiskBarriers'
+import type { Barrier, PredictResponse, RiskLevel } from '@/lib/types'
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface RankedRow {
+  rank: number
+  barrierId: string
+  name: string
+  riskLevel: RiskLevel
+  probability: number
+  condition: string
+  topFactor: string
+  topFactorValue: number | null
+  barrierType: string
+  lod: string
+  side: string
+}
+
+type SortDir = 'asc' | 'desc'
+
+// ---------------------------------------------------------------------------
+// Risk level pill color mapping (small inline badge)
+// ---------------------------------------------------------------------------
+
+const PILL_COLORS: Record<RiskLevel, string> = {
+  red: 'bg-red-500 text-white',
+  amber: 'bg-amber-400 text-gray-900',
+  green: 'bg-green-500 text-white',
+  unanalyzed: 'bg-[#2E3348] text-[#5A6178]',
+}
+
+const PILL_LABELS: Record<RiskLevel, string> = {
+  red: 'High',
+  amber: 'Medium',
+  green: 'Low',
+  unanalyzed: '—',
+}
+
+// ---------------------------------------------------------------------------
+// Pure function
+// ---------------------------------------------------------------------------
+
+/**
+ * Build all analyzed barrier rows, ranked by failure probability, then sorted
+ * by the given key/direction.
+ *
+ * @param barriers    - All barriers from BowtieContext.
+ * @param predictions - Map of barrierId → PredictResponse from BowtieContext.
+ * @param sortKey     - Column key to sort by.
+ * @param sortDir     - Sort direction ('asc' | 'desc').
+ * @returns Sorted array of RankedRow.
+ */
+export function buildRankedRows(
+  barriers: Barrier[],
+  predictions: Record<string, PredictResponse>,
+  sortKey: keyof RankedRow,
+  sortDir: SortDir,
+): RankedRow[] {
+  // Filter to only analyzed barriers
+  const analyzed = barriers.filter((b) => predictions[b.id] !== undefined)
+
+  // Sort descending by model1_probability to assign stable rank
+  const byProbability = [...analyzed].sort(
+    (a, b) => predictions[b.id].model1_probability - predictions[a.id].model1_probability,
+  )
+
+  // Build rows with rank assigned from probability-sorted order
+  const rows: RankedRow[] = byProbability.map((barrier, idx) => {
+    const pred = predictions[barrier.id]
+    const probability = pred.model1_probability
+
+    // Find top SHAP factor: exclude hidden features, sort by |value| desc, take first
+    const visibleShap = (pred.model1_shap ?? []).filter(
+      (s) => !SHAP_HIDDEN_FEATURES.has(s.feature),
+    )
+    const sortedShap = [...visibleShap].sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+    const topShap = sortedShap.length > 0 ? sortedShap[0] : null
+
+    const topFactor = topShap
+      ? (FEATURE_DISPLAY_NAMES[topShap.feature] ?? topShap.feature)
+      : '—'
+    const topFactorValue = topShap ? topShap.value : null
+
+    return {
+      rank: idx + 1,
+      barrierId: barrier.id,
+      name: barrier.name,
+      riskLevel: barrier.riskLevel,
+      probability,
+      condition: pred.barrier_condition_display ?? '—',
+      topFactor,
+      topFactorValue,
+      barrierType: pred.barrier_type_display ?? barrier.barrier_type,
+      lod: pred.lod_display ?? barrier.line_of_defense,
+      side: barrier.side,
+    }
+  })
+
+  // Re-sort by the requested key/direction
+  return [...rows].sort((a, b) => {
+    const aVal = a[sortKey]
+    const bVal = b[sortKey]
+
+    if (aVal === null && bVal === null) return 0
+    if (aVal === null) return sortDir === 'asc' ? 1 : -1
+    if (bVal === null) return sortDir === 'asc' ? -1 : 1
+
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal
+    }
+
+    const aStr = String(aVal).toLowerCase()
+    const bStr = String(bVal).toLowerCase()
+    if (aStr < bStr) return sortDir === 'asc' ? -1 : 1
+    if (aStr > bStr) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Column definitions
+// ---------------------------------------------------------------------------
+
+interface Column {
+  key: keyof RankedRow
+  label: string
+  className?: string
+}
+
+const COLUMNS: Column[] = [
+  { key: 'rank', label: '#', className: 'w-10 text-center' },
+  { key: 'name', label: 'Barrier Name', className: 'min-w-[160px]' },
+  { key: 'riskLevel', label: 'Risk Level', className: 'w-24 text-center' },
+  { key: 'condition', label: 'Condition', className: 'min-w-[120px]' },
+  { key: 'topFactor', label: 'Top SHAP Factor', className: 'min-w-[140px]' },
+  { key: 'barrierType', label: 'Type', className: 'min-w-[100px]' },
+  { key: 'lod', label: 'LOD', className: 'w-16 text-center' },
+  { key: 'side', label: 'Side', className: 'w-24 text-center' },
+]
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function RankedBarriers() {
+  const { barriers, predictions, setSelectedBarrierId } = useBowtieContext()
+  const [sortKey, setSortKey] = useState<keyof RankedRow>('rank')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+  const rows = buildRankedRows(barriers, predictions, sortKey, sortDir)
+
+  function handleHeaderClick(key: keyof RankedRow) {
+    if (key === sortKey) {
+      // Toggle direction
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  return (
+    <div data-testid="ranked-barriers-table" className="overflow-x-auto">
+      <h3 className="text-base font-semibold mb-3 text-[#E8ECF4]">All Barriers Ranked by Risk</h3>
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-[#5A6178]">No analyzed barriers yet</p>
+      ) : (
+        <table className="w-full text-sm border-collapse bg-[#1A1D27]">
+          <thead>
+            <tr className="bg-[#242836] border-b border-[#2E3348]">
+              {COLUMNS.map((col) => {
+                const isActive = col.key === sortKey
+                const indicator = isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''
+                return (
+                  <th
+                    key={col.key}
+                    className={`px-3 py-2 text-left text-xs font-medium text-[#8B93A8] cursor-pointer select-none whitespace-nowrap ${col.className ?? ''}`}
+                    onClick={() => handleHeaderClick(col.key)}
+                  >
+                    {col.label}
+                    {isActive && (
+                      <span className="ml-1 text-[#E8ECF4]">{sortDir === 'asc' ? '▲' : '▼'}</span>
+                    )}
+                    {!isActive && indicator}
+                  </th>
+                )
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const isPositive = row.topFactorValue !== null && row.topFactorValue >= 0
+              const pillColor = PILL_COLORS[row.riskLevel]
+              const pillLabel = PILL_LABELS[row.riskLevel]
+
+              return (
+                <tr
+                  key={row.barrierId}
+                  className="border-b border-[#2E3348] hover:bg-[#242836] cursor-pointer text-[#E8ECF4] transition-colors"
+                  onClick={() => setSelectedBarrierId(row.barrierId)}
+                >
+                  {/* Rank */}
+                  <td className="px-3 py-2 text-center text-[#8B93A8] font-mono">{row.rank}</td>
+
+                  {/* Barrier Name */}
+                  <td className="px-3 py-2 font-medium">{row.name}</td>
+
+                  {/* Risk Level pill */}
+                  <td className="px-3 py-2 text-center">
+                    <span
+                      className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${pillColor}`}
+                    >
+                      {pillLabel}
+                    </span>
+                  </td>
+
+                  {/* Condition */}
+                  <td className="px-3 py-2 text-[#8B93A8]">{row.condition}</td>
+
+                  {/* Top SHAP Factor */}
+                  <td className="px-3 py-2">
+                    <span className="text-[#8B93A8] mr-2">{row.topFactor}</span>
+                    {row.topFactorValue !== null && (
+                      <span
+                        className={`text-xs font-mono ${isPositive ? 'text-red-400' : 'text-blue-400'}`}
+                      >
+                        {isPositive ? '+' : ''}
+                        {row.topFactorValue.toFixed(3)}
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Barrier Type */}
+                  <td className="px-3 py-2 text-[#8B93A8]">{row.barrierType}</td>
+
+                  {/* LOD */}
+                  <td className="px-3 py-2 text-center text-[#8B93A8]">{row.lod}</td>
+
+                  {/* Side */}
+                  <td className="px-3 py-2 text-center">
+                    <span
+                      className={`text-xs ${row.side === 'prevention' ? 'text-blue-300' : 'text-amber-300'}`}
+                    >
+                      {row.side === 'prevention' ? 'Prevention' : 'Mitigation'}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
