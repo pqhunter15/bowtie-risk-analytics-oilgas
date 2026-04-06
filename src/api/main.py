@@ -17,6 +17,7 @@ to avoid blocking the event loop (D-07, API-05).
 """
 
 import asyncio
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -28,6 +29,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.mapping_loader import MappingConfig
 from src.api.schemas import (
+    AprioriRule,
+    AprioriRulesResponse,
     CitationResponse,
     DegradationFactor,
     ExplainRequest,
@@ -90,12 +93,31 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     mapping_config = MappingConfig.load()
     logger.info("MappingConfig loaded from configs/mappings/")
 
+    # Load Apriori co-failure rules (S03)
+    apriori_rules_path = ARTIFACTS_DIR / "apriori_rules.json"
+    if apriori_rules_path.exists():
+        with open(apriori_rules_path) as f:
+            apriori_data = json.load(f)
+        apriori_rules_list = apriori_data["rules"]
+        logger.info(
+            "Loaded %d Apriori rules from %s",
+            len(apriori_rules_list),
+            apriori_rules_path,
+        )
+    else:
+        apriori_rules_list = []
+        logger.warning(
+            "Apriori rules not found at %s — endpoint will return empty list",
+            apriori_rules_path,
+        )
+
     # Store on app.state for endpoint access (D-05)
     app.state.predictor = predictor
     app.state.explainer = explainer
     app.state.start_time = start_time
     app.state.rag_corpus_size = len(rag_agent._barrier_meta)
     app.state.mapping_config = mapping_config
+    app.state.apriori_rules = apriori_rules_list
 
     yield  # App runs here
 
@@ -271,6 +293,27 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
                 threshold=CONFIDENCE_THRESHOLD,
             ),
             uptime_seconds=round(uptime, 2),
+        )
+
+    # -----------------------------------------------------------------------
+    # GET /apriori-rules — pre-computed Apriori co-failure rules (S03)
+    # -----------------------------------------------------------------------
+
+    @app.get("/apriori-rules", response_model=AprioriRulesResponse)
+    async def apriori_rules(req: Request) -> AprioriRulesResponse:
+        """Return pre-computed Apriori barrier co-failure association rules (S03).
+
+        Rules are loaded once at startup from data/models/artifacts/apriori_rules.json.
+        Returns an empty list if the artifact was not present at startup.
+
+        Args:
+            req: Raw FastAPI request (used to access app.state).
+
+        Returns:
+            AprioriRulesResponse with a list of AprioriRule objects.
+        """
+        return AprioriRulesResponse(
+            rules=[AprioriRule(**r) for r in req.app.state.apriori_rules]
         )
 
     # -----------------------------------------------------------------------

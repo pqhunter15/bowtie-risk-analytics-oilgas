@@ -208,3 +208,26 @@ class ErrorResponse(BaseModel):
 
     error: str
     detail: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Apriori co-failure rules schemas (S03)
+# ---------------------------------------------------------------------------
+
+class AprioriRule(BaseModel):
+    """A single Apriori association rule between barrier families (S03)."""
+
+    model_config = ConfigDict(strict=False)
+
+    antecedent: str
+    consequent: str
+    support: float
+    confidence: float
+    lift: float
+    count: int
+
+
+class AprioriRulesResponse(BaseModel):
+    """GET /apriori-rules response body (S03)."""
+
+    rules: list[AprioriRule]

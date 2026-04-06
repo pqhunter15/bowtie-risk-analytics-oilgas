@@ -168,6 +168,16 @@ def client(mock_predictor: MagicMock) -> TestClient:
     app.state.start_time = time.monotonic()
     app.state.rag_corpus_size = 3253
     app.state.mapping_config = MappingConfig.load()
+    app.state.apriori_rules = [
+        {
+            "antecedent": "communication",
+            "consequent": "procedures",
+            "support": 0.072,
+            "confidence": 0.732,
+            "lift": 1.42,
+            "count": 52,
+        }
+    ]
 
     with TestClient(app) as c:
         yield c
@@ -472,18 +482,79 @@ def test_explain_calls_via_to_thread(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# /apriori-rules tests (S03 — T02)
+# ---------------------------------------------------------------------------
+
+def test_apriori_rules_returns_200(client: TestClient) -> None:
+    """GET /apriori-rules returns 200 with a rules list containing 1 entry."""
+    resp = client.get("/apriori-rules")
+    assert resp.status_code == 200
+
+    data = resp.json()
+    assert "rules" in data
+    assert isinstance(data["rules"], list)
+    assert len(data["rules"]) == 1
+
+
+def test_apriori_rules_empty_when_no_artifact(mock_predictor: MagicMock) -> None:
+    """GET /apriori-rules returns rules: [] when app.state.apriori_rules is empty."""
+
+    @asynccontextmanager
+    async def noop_lifespan(app):  # type: ignore[type-arg]
+        yield
+
+    app = create_app(lifespan_override=noop_lifespan)
+    app.state.predictor = mock_predictor
+    app.state.explainer = _make_mock_explainer()
+    app.state.start_time = time.monotonic()
+    app.state.rag_corpus_size = 3253
+    app.state.mapping_config = MappingConfig.load()
+    app.state.apriori_rules = []
+
+    with TestClient(app) as c:
+        resp = c.get("/apriori-rules")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"rules": []}
+
+
+def test_apriori_rules_schema_validated(client: TestClient) -> None:
+    """GET /apriori-rules returns rules with all 6 required fields."""
+    resp = client.get("/apriori-rules")
+    assert resp.status_code == 200
+
+    rule = resp.json()["rules"][0]
+    assert "antecedent" in rule
+    assert "consequent" in rule
+    assert "support" in rule
+    assert "confidence" in rule
+    assert "lift" in rule
+    assert "count" in rule
+
+    # Type checks
+    assert isinstance(rule["antecedent"], str)
+    assert isinstance(rule["consequent"], str)
+    assert isinstance(rule["support"], float)
+    assert isinstance(rule["confidence"], float)
+    assert isinstance(rule["lift"], float)
+    assert isinstance(rule["count"], int)
+
+
+# ---------------------------------------------------------------------------
 # OpenAPI schema regression test (Task 2)
 # ---------------------------------------------------------------------------
 
 def test_openapi_schema_has_all_endpoints(client: TestClient) -> None:
-    """Verify OpenAPI spec includes /predict, /explain, /health with correct methods."""
+    """Verify OpenAPI spec includes /predict, /explain, /health, /apriori-rules."""
     resp = client.get("/openapi.json")
     assert resp.status_code == 200
     paths = resp.json()["paths"]
     assert "/predict" in paths
     assert "/explain" in paths
     assert "/health" in paths
+    assert "/apriori-rules" in paths
     # Verify HTTP methods
     assert "post" in paths["/predict"]
     assert "post" in paths["/explain"]
     assert "get" in paths["/health"]
+    assert "get" in paths["/apriori-rules"]
