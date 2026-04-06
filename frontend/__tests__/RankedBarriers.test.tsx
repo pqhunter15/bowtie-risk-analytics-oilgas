@@ -1,24 +1,38 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { useEffect, useRef } from 'react'
 import { BowtieProvider, useBowtieContext } from '@/context/BowtieContext'
 import type { Barrier, PredictResponse, ShapValue } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
-// Mock EvidenceSection to avoid real network calls from /explain
+// Mock explain from @/lib/api — EvidenceSection calls this on mount.
+// Use vi.hoisted so the variable is available inside the vi.mock factory,
+// which is hoisted to the top of the file before any imports are resolved.
 // ---------------------------------------------------------------------------
 
-vi.mock('@/components/panel/EvidenceSection', () => ({
-  default: ({ barrierId }: { barrierId: string }) => (
-    <div data-testid="evidence-section">Evidence for {barrierId}</div>
-  ),
-}))
+const mockExplain = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual('@/lib/api')
+  return { ...actual, explain: mockExplain }
+})
 
 // ---------------------------------------------------------------------------
 // Import component AFTER vi.mock
 // ---------------------------------------------------------------------------
 
 import RankedBarriers, { buildRankedRows } from '@/components/dashboard/RankedBarriers'
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+const MOCK_EXPLAIN_RESPONSE = {
+  narrative: 'Historical evidence shows pressure relief failures are common.',
+  citations: [],
+  retrieval_confidence: 0.75,
+  model_used: 'claude-haiku',
+  recommendations: '',
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,6 +55,7 @@ function makeBarrier(overrides: Partial<Barrier> = {}): Barrier {
 function makePrediction(
   model1_probability: number,
   model1_shap: ShapValue[] = [],
+  overrides: Partial<PredictResponse> = {},
 ): PredictResponse {
   return {
     model1_probability,
@@ -55,6 +70,7 @@ function makePrediction(
     barrier_type_display: 'Administrative',
     lod_display: '1st',
     barrier_condition_display: 'Nominal',
+    ...overrides,
   }
 }
 
@@ -177,10 +193,15 @@ describe('buildRankedRows', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Component tests: RankedBarriers rendering
+// Component tests: RankedBarriers rendering (SetupBarriers helper pattern)
 // ---------------------------------------------------------------------------
 
 describe('RankedBarriers component', () => {
+  beforeEach(() => {
+    mockExplain.mockClear()
+    mockExplain.mockResolvedValue(MOCK_EXPLAIN_RESPONSE)
+  })
+
   it('shows empty-state text when no analyzed barriers', () => {
     render(
       <BowtieProvider>
@@ -247,15 +268,18 @@ describe('RankedBarriers component', () => {
     const row = await screen.findByText('Pressure Relief Valve')
     fireEvent.click(row.closest('tr')!)
 
-    // EvidenceSection not yet mounted
-    expect(screen.queryByTestId('evidence-section')).toBeNull()
+    // Load Evidence button is present, EvidenceSection not yet mounted
+    expect(screen.getByTestId('load-evidence-btn')).toBeTruthy()
+    expect(screen.queryByText('Loading evidence...')).toBeNull()
+    expect(screen.queryByText(MOCK_EXPLAIN_RESPONSE.narrative)).toBeNull()
 
-    // Click Load Evidence button
-    const btn = screen.getByTestId('load-evidence-btn')
-    fireEvent.click(btn)
+    // Click Load Evidence button — EvidenceSection mounts and starts fetching
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('load-evidence-btn'))
+    })
 
-    // Now EvidenceSection is mounted
-    expect(screen.getByTestId('evidence-section')).toBeTruthy()
+    // Evidence button gone; EvidenceSection is mounted (shows narrative after resolve)
+    expect(screen.queryByTestId('load-evidence-btn')).toBeNull()
   })
 
   it('Load Evidence button click does not collapse the expanded row (stopPropagation)', async () => {
@@ -264,8 +288,9 @@ describe('RankedBarriers component', () => {
     }))
     const row = await screen.findByText('Pressure Relief Valve')
     fireEvent.click(row.closest('tr')!)
-    const btn = screen.getByTestId('load-evidence-btn')
-    fireEvent.click(btn)
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('load-evidence-btn'))
+    })
     // Row still expanded after clicking Load Evidence
     expect(screen.getByTestId('ranked-row-expanded')).toBeTruthy()
   })
@@ -287,5 +312,177 @@ describe('RankedBarriers component', () => {
     fireEvent.click(second.closest('tr')!)
     // Still only one expanded row (the second one now)
     expect(screen.getAllByTestId('ranked-row-expanded')).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Component tests: initialBarriers + initialPredictions pattern with
+// sub-component content verification (RiskScoreBadge, ShapWaterfall, evidence)
+// ---------------------------------------------------------------------------
+
+// Fixtures matching task plan spec
+const BARRIER_WITH_ID: Barrier = {
+  id: 'b-001',
+  name: 'Pressure Relief Valve',
+  side: 'prevention',
+  barrier_type: 'engineering',
+  barrier_family: 'pressure_relief',
+  line_of_defense: '1st',
+  barrierRole: 'prevent overpressure',
+  riskLevel: 'red',
+  probability: 0.85,
+}
+
+const HIGH_RISK_PREDICTION: PredictResponse = {
+  model1_probability: 0.85,
+  model2_probability: 0.3,
+  model1_shap: [{ feature: 'barrier_family', value: 0.3, category: 'barrier' }],
+  model2_shap: [],
+  model1_base_value: 0.5,
+  model2_base_value: 0.2,
+  feature_metadata: [],
+  degradation_factors: [],
+  risk_level: 'High',
+  barrier_type_display: 'Engineering',
+  lod_display: '1st',
+  barrier_condition_display: 'Likely Degraded',
+}
+
+const SECOND_BARRIER: Barrier = {
+  id: 'b-002',
+  name: 'Emergency Shutdown Valve',
+  side: 'mitigation',
+  barrier_type: 'engineering',
+  barrier_family: 'emergency_shutdown',
+  line_of_defense: '2nd',
+  barrierRole: 'isolate process',
+  riskLevel: 'amber',
+  probability: 0.55,
+}
+
+const MEDIUM_RISK_PREDICTION: PredictResponse = {
+  model1_probability: 0.55,
+  model2_probability: 0.2,
+  model1_shap: [{ feature: 'barrier_family', value: 0.15, category: 'barrier' }],
+  model2_shap: [],
+  model1_base_value: 0.4,
+  model2_base_value: 0.2,
+  feature_metadata: [],
+  degradation_factors: [],
+  risk_level: 'Medium',
+  barrier_type_display: 'Engineering',
+  lod_display: '2nd',
+  barrier_condition_display: 'Partially Degraded',
+}
+
+function renderWithInitial(
+  barriers: Barrier[] = [BARRIER_WITH_ID],
+  predictions: Record<string, PredictResponse> = { 'b-001': HIGH_RISK_PREDICTION },
+) {
+  return render(
+    <BowtieProvider initialBarriers={barriers} initialPredictions={predictions}>
+      <RankedBarriers />
+    </BowtieProvider>,
+  )
+}
+
+describe('RankedBarriers — initialBarriers/initialPredictions + sub-component content', () => {
+  beforeEach(() => {
+    mockExplain.mockClear()
+    mockExplain.mockResolvedValue(MOCK_EXPLAIN_RESPONSE)
+  })
+
+  // (a) Empty state
+  it('shows "No analyzed barriers yet" when rendered with no barriers or predictions', () => {
+    renderWithInitial([], {})
+    expect(screen.getByText('No analyzed barriers yet')).toBeTruthy()
+  })
+
+  // (b) Renders one row per analyzed barrier
+  it('renders exactly one data row for one analyzed barrier', () => {
+    renderWithInitial()
+    expect(screen.getByText('Pressure Relief Valve')).toBeTruthy()
+    expect(screen.queryByText('Emergency Shutdown Valve')).toBeNull()
+  })
+
+  // (c) Click row expands section
+  it('clicking a row reveals the ranked-row-expanded section', () => {
+    renderWithInitial()
+    expect(screen.queryByTestId('ranked-row-expanded')).toBeNull()
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    expect(screen.getByTestId('ranked-row-expanded')).toBeTruthy()
+  })
+
+  // (d) Click same row collapses
+  it('clicking the same row a second time collapses the expanded section', () => {
+    renderWithInitial()
+    const tr = screen.getByText('Pressure Relief Valve').closest('tr')!
+    fireEvent.click(tr)
+    expect(screen.getByTestId('ranked-row-expanded')).toBeTruthy()
+    fireEvent.click(tr)
+    expect(screen.queryByTestId('ranked-row-expanded')).toBeNull()
+  })
+
+  // (e) RiskScoreBadge text visible in expanded section
+  it('expanded section shows "High reliability concern" for a red-level barrier', () => {
+    renderWithInitial()
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    // RiskScoreBadge renders subtitle text based on riskLevel
+    expect(screen.getByText('High reliability concern')).toBeTruthy()
+  })
+
+  // (f) ShapWaterfall heading visible in expanded section
+  it('expanded section shows "Barrier Analysis Factors" heading from ShapWaterfall', () => {
+    renderWithInitial()
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    expect(screen.getByText('Barrier Analysis Factors')).toBeTruthy()
+  })
+
+  // (g) Load Evidence button visible before click
+  it('Load Evidence button is visible in expanded section before clicking it', () => {
+    renderWithInitial()
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    expect(screen.getByRole('button', { name: 'Load Evidence' })).toBeTruthy()
+  })
+
+  // (h) Clicking Load Evidence calls explain
+  it('clicking Load Evidence invokes the explain API function', async () => {
+    renderWithInitial()
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Load Evidence' }))
+    })
+    expect(mockExplain).toHaveBeenCalledOnce()
+  })
+
+  // (i) After explain resolves, narrative is rendered
+  it('renders the explain narrative once EvidenceSection has loaded', async () => {
+    renderWithInitial()
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Load Evidence' }))
+    })
+    // Wait for the async explain promise to settle and React to re-render
+    const narrativeEl = await screen.findByText(MOCK_EXPLAIN_RESPONSE.narrative)
+    expect(narrativeEl).toBeTruthy()
+  })
+
+  // (j) Row switching — expand A, click B → A collapses, B expands
+  it('expanding barrier B after A collapses A and shows B expanded', () => {
+    renderWithInitial(
+      [BARRIER_WITH_ID, SECOND_BARRIER],
+      { 'b-001': HIGH_RISK_PREDICTION, 'b-002': MEDIUM_RISK_PREDICTION },
+    )
+    // Expand first barrier
+    fireEvent.click(screen.getByText('Pressure Relief Valve').closest('tr')!)
+    expect(screen.getAllByTestId('ranked-row-expanded')).toHaveLength(1)
+
+    // Expand second barrier — first should collapse
+    fireEvent.click(screen.getByText('Emergency Shutdown Valve').closest('tr')!)
+    expect(screen.getAllByTestId('ranked-row-expanded')).toHaveLength(1)
+
+    // Verify it's the second barrier's content now visible (Moderate concern)
+    expect(screen.getByText('Moderate reliability concern')).toBeTruthy()
+    expect(screen.queryByText('High reliability concern')).toBeNull()
   })
 })
