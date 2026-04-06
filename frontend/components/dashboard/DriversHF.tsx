@@ -342,8 +342,16 @@ export function AprioriRulesTable() {
     }
   }
 
-  if (loading) return <p>Loading co-failure rules...</p>
-  if (error) return <p className="text-red-400">Error: {error}</p>
+  if (loading) return (
+    <div data-testid="apriori-rules-table" className="bg-[#242836] rounded-lg p-4">
+      <p className="text-sm text-[#8B93A8] animate-pulse">Loading co-failure rules...</p>
+    </div>
+  )
+  if (error) return (
+    <div className="bg-[#242836] rounded-lg p-4">
+      <span className="text-red-400 text-sm">Error: {error}</span>
+    </div>
+  )
 
   const sorted = sortRules(rules, sortKey, sortDir)
 
