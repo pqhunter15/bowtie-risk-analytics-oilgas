@@ -1,8 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Fragment } from 'react'
 import { useBowtieContext } from '@/context/BowtieContext'
 import { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES } from './TopAtRiskBarriers'
+import RiskScoreBadge from '@/components/panel/RiskScoreBadge'
+import ShapWaterfall from '@/components/panel/ShapWaterfall'
+import EvidenceSection from '@/components/panel/EvidenceSection'
 import type { Barrier, PredictResponse, RiskLevel } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
@@ -150,9 +153,11 @@ const COLUMNS: Column[] = [
 // ---------------------------------------------------------------------------
 
 export default function RankedBarriers() {
-  const { barriers, predictions, setSelectedBarrierId } = useBowtieContext()
+  const { barriers, predictions, setSelectedBarrierId, eventDescription } = useBowtieContext()
   const [sortKey, setSortKey] = useState<keyof RankedRow>('rank')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null)
+  const [showEvidence, setShowEvidence] = useState<Record<string, boolean>>({})
 
   const rows = buildRankedRows(barriers, predictions, sortKey, sortDir)
 
@@ -202,57 +207,108 @@ export default function RankedBarriers() {
               const pillLabel = PILL_LABELS[row.riskLevel]
 
               return (
-                <tr
-                  key={row.barrierId}
-                  className="border-b border-[#2E3348] hover:bg-[#242836] cursor-pointer text-[#E8ECF4] transition-colors"
-                  onClick={() => setSelectedBarrierId(row.barrierId)}
-                >
-                  {/* Rank */}
-                  <td className="px-3 py-2 text-center text-[#8B93A8] font-mono">{row.rank}</td>
+                <Fragment key={row.barrierId}>
+                  <tr
+                    className="border-b border-[#2E3348] hover:bg-[#242836] cursor-pointer text-[#E8ECF4] transition-colors"
+                    onClick={() => {
+                      setExpandedRowId((prev) => (prev === row.barrierId ? null : row.barrierId))
+                      setSelectedBarrierId(row.barrierId)
+                    }}
+                  >
+                    {/* Rank */}
+                    <td className="px-3 py-2 text-center text-[#8B93A8] font-mono">{row.rank}</td>
 
-                  {/* Barrier Name */}
-                  <td className="px-3 py-2 font-medium">{row.name}</td>
+                    {/* Barrier Name */}
+                    <td className="px-3 py-2 font-medium">{row.name}</td>
 
-                  {/* Risk Level pill */}
-                  <td className="px-3 py-2 text-center">
-                    <span
-                      className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${pillColor}`}
-                    >
-                      {pillLabel}
-                    </span>
-                  </td>
-
-                  {/* Condition */}
-                  <td className="px-3 py-2 text-[#8B93A8]">{row.condition}</td>
-
-                  {/* Top SHAP Factor */}
-                  <td className="px-3 py-2">
-                    <span className="text-[#8B93A8] mr-2">{row.topFactor}</span>
-                    {row.topFactorValue !== null && (
+                    {/* Risk Level pill */}
+                    <td className="px-3 py-2 text-center">
                       <span
-                        className={`text-xs font-mono ${isPositive ? 'text-red-400' : 'text-blue-400'}`}
+                        className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${pillColor}`}
                       >
-                        {isPositive ? '+' : ''}
-                        {row.topFactorValue.toFixed(3)}
+                        {pillLabel}
                       </span>
-                    )}
-                  </td>
+                    </td>
 
-                  {/* Barrier Type */}
-                  <td className="px-3 py-2 text-[#8B93A8]">{row.barrierType}</td>
+                    {/* Condition */}
+                    <td className="px-3 py-2 text-[#8B93A8]">{row.condition}</td>
 
-                  {/* LOD */}
-                  <td className="px-3 py-2 text-center text-[#8B93A8]">{row.lod}</td>
+                    {/* Top SHAP Factor */}
+                    <td className="px-3 py-2">
+                      <span className="text-[#8B93A8] mr-2">{row.topFactor}</span>
+                      {row.topFactorValue !== null && (
+                        <span
+                          className={`text-xs font-mono ${isPositive ? 'text-red-400' : 'text-blue-400'}`}
+                        >
+                          {isPositive ? '+' : ''}
+                          {row.topFactorValue.toFixed(3)}
+                        </span>
+                      )}
+                    </td>
 
-                  {/* Side */}
-                  <td className="px-3 py-2 text-center">
-                    <span
-                      className={`text-xs ${row.side === 'prevention' ? 'text-blue-300' : 'text-amber-300'}`}
-                    >
-                      {row.side === 'prevention' ? 'Prevention' : 'Mitigation'}
-                    </span>
-                  </td>
-                </tr>
+                    {/* Barrier Type */}
+                    <td className="px-3 py-2 text-[#8B93A8]">{row.barrierType}</td>
+
+                    {/* LOD */}
+                    <td className="px-3 py-2 text-center text-[#8B93A8]">{row.lod}</td>
+
+                    {/* Side */}
+                    <td className="px-3 py-2 text-center">
+                      <span
+                        className={`text-xs ${row.side === 'prevention' ? 'text-blue-300' : 'text-amber-300'}`}
+                      >
+                        {row.side === 'prevention' ? 'Prevention' : 'Mitigation'}
+                      </span>
+                    </td>
+                  </tr>
+
+                  {expandedRowId === row.barrierId && predictions[row.barrierId] && (
+                    <tr key={`${row.barrierId}-expanded`} data-testid="ranked-row-expanded">
+                      <td colSpan={COLUMNS.length} className="px-4 py-4 bg-[#1E2130] border-b border-[#2E3348]">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Column 1: RiskScoreBadge */}
+                          <div>
+                            <RiskScoreBadge
+                              probability={row.probability}
+                              riskLevel={row.riskLevel}
+                            />
+                          </div>
+                          {/* Column 2: ShapWaterfall */}
+                          <div className="md:col-span-2">
+                            <ShapWaterfall
+                              shap={predictions[row.barrierId].model1_shap}
+                              baseValue={predictions[row.barrierId].model1_base_value}
+                              featureDisplayNames={FEATURE_DISPLAY_NAMES}
+                              hiddenFeatures={SHAP_HIDDEN_FEATURES}
+                            />
+                          </div>
+                        </div>
+                        {/* Evidence gating */}
+                        <div className="mt-3 border-t border-[#2E3348] pt-3">
+                          {showEvidence[row.barrierId] ? (
+                            <EvidenceSection
+                              barrierId={row.barrierId}
+                              barrier={barriers.find((b) => b.id === row.barrierId)!}
+                              eventDescription={eventDescription}
+                              prediction={predictions[row.barrierId]}
+                            />
+                          ) : (
+                            <button
+                              data-testid="load-evidence-btn"
+                              className="px-3 py-1.5 text-sm bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-md transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setShowEvidence((prev) => ({ ...prev, [row.barrierId]: true }))
+                              }}
+                            >
+                              Load Evidence
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               )
             })}
           </tbody>
