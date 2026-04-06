@@ -30,7 +30,7 @@ import DashboardView from '@/components/dashboard/DashboardView'
 // Test helpers
 // ---------------------------------------------------------------------------
 
-const TAB_LABELS = ['Executive Summary', 'Barrier Coverage', 'Incident Trends', 'Risk Matrix', 'Drivers & HF', 'Ranked Barriers']
+const TAB_LABELS = ['Executive Summary', 'Barrier Coverage', 'Incident Trends', 'Risk Matrix', 'Drivers & HF', 'Ranked Barriers', 'Evidence']
 
 type BarrierDef = Omit<Barrier, 'id' | 'riskLevel'>
 
@@ -121,10 +121,10 @@ describe('DashboardView', () => {
     mockExplain.mockResolvedValue({ narrative: 'Test evidence', citations: [], retrieval_confidence: 0.8, model_used: 'stub', recommendations: '' })
   })
 
-  it('renders all 6 tab buttons with correct labels', () => {
+  it('renders all 7 tab buttons with correct labels', () => {
     renderDashboard()
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(6)
+    expect(buttons).toHaveLength(7)
     for (const label of TAB_LABELS) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
     }
@@ -152,7 +152,7 @@ describe('DashboardView', () => {
 
   it('each non-Executive-Summary, non-DriversHF tab shows the correct coming soon content', () => {
     renderDashboard()
-    const comingSoonTabs = TAB_LABELS.filter((l) => l !== 'Executive Summary' && l !== 'Drivers & HF' && l !== 'Ranked Barriers')
+    const comingSoonTabs = TAB_LABELS.filter((l) => l !== 'Executive Summary' && l !== 'Drivers & HF' && l !== 'Ranked Barriers' && l !== 'Evidence')
     for (const label of comingSoonTabs) {
       fireEvent.click(screen.getByRole('button', { name: label }))
       expect(screen.getByText(`${label} coming soon`)).toBeTruthy()

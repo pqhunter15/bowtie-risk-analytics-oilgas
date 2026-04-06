@@ -9,6 +9,7 @@ import ModelKPIs from './ModelKPIs'
 import ScenarioContext from './ScenarioContext'
 import GlobalShapChart, { PifPrevalenceChart, AprioriRulesTable } from './DriversHF'
 import RankedBarriers from './RankedBarriers'
+import EvidenceView from './EvidenceView'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -21,6 +22,7 @@ const TABS = [
   { id: 'risk-matrix', label: 'Risk Matrix' },
   { id: 'drivers-hf', label: 'Drivers & HF' },
   { id: 'ranked-barriers', label: 'Ranked Barriers' },
+  { id: 'evidence', label: 'Evidence' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -109,7 +111,8 @@ export default function DashboardView() {
           </>
         )}
         {activeTab === 'ranked-barriers' && <RankedBarriers />}
-        {activeTab !== 'executive-summary' && activeTab !== 'drivers-hf' && activeTab !== 'ranked-barriers' && (
+        {activeTab === 'evidence' && <EvidenceView />}
+        {activeTab !== 'executive-summary' && activeTab !== 'drivers-hf' && activeTab !== 'ranked-barriers' && activeTab !== 'evidence' && (
           <div className="flex items-center justify-center h-full">
             <div className="rounded-lg border border-dashed border-[#2E3348] p-8 text-center">
               <p className="text-sm text-[#5A6178]">
