@@ -48,7 +48,8 @@ def _make_synthetic_matrix(tmp_path: Path, n_rows: int = 50) -> Path:
         data[col] = rng.integers(0, 5, size=n_rows)
     for col in PIF_FEATURES:
         data[col] = rng.integers(0, 2, size=n_rows)
-    data["supporting_text_count"] = rng.integers(0, 10, size=n_rows)
+    for col in NUMERIC_FEATURES:
+        data[col] = rng.integers(0, 10, size=n_rows)
 
     # Unique incident groups (each appears ~3 times for meaningful GroupKFold)
     data["incident_id"] = [f"inc_{i // 3}" for i in range(n_rows)]

@@ -30,7 +30,7 @@ import DashboardView from '@/components/dashboard/DashboardView'
 // Test helpers
 // ---------------------------------------------------------------------------
 
-const TAB_LABELS = ['Executive Summary', 'Barrier Coverage', 'Incident Trends', 'Risk Matrix', 'Drivers & HF', 'Ranked Barriers', 'Evidence']
+const TAB_LABELS = ['Executive Summary', 'Drivers & HF', 'Ranked Barriers', 'Evidence']
 
 type BarrierDef = Omit<Barrier, 'id' | 'riskLevel'>
 
@@ -121,10 +121,10 @@ describe('DashboardView', () => {
     mockExplain.mockResolvedValue({ narrative: 'Test evidence', citations: [], retrieval_confidence: 0.8, model_used: 'stub', recommendations: '' })
   })
 
-  it('renders all 7 tab buttons with correct labels', () => {
+  it('renders all 4 tab buttons with correct labels', () => {
     renderDashboard()
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(7)
+    expect(buttons).toHaveLength(4)
     for (const label of TAB_LABELS) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy()
     }
@@ -138,35 +138,11 @@ describe('DashboardView', () => {
     expect(screen.getByTestId('risk-distribution-chart')).toBeTruthy()
   })
 
-  it('clicking Barrier Coverage makes it active and deactivates Executive Summary', () => {
-    renderDashboard()
-    const barrierBtn = screen.getByRole('button', { name: 'Barrier Coverage' })
-    const execBtn = screen.getByRole('button', { name: 'Executive Summary' })
-
-    fireEvent.click(barrierBtn)
-
-    expect(barrierBtn.className).toContain('border-[#3B82F6]')
-    expect(execBtn.className).not.toContain('border-[#3B82F6]')
-    expect(screen.getByText('Barrier Coverage coming soon')).toBeTruthy()
-  })
-
-  it('each non-Executive-Summary, non-DriversHF tab shows the correct coming soon content', () => {
-    renderDashboard()
-    const comingSoonTabs = TAB_LABELS.filter((l) => l !== 'Executive Summary' && l !== 'Drivers & HF' && l !== 'Ranked Barriers' && l !== 'Evidence')
-    for (const label of comingSoonTabs) {
-      fireEvent.click(screen.getByRole('button', { name: label }))
-      expect(screen.getByText(`${label} coming soon`)).toBeTruthy()
-    }
-  })
-
   it('only one tab content is shown at a time', () => {
     renderDashboard()
-    fireEvent.click(screen.getByRole('button', { name: 'Incident Trends' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Drivers & HF' }))
 
-    expect(screen.getByText('Incident Trends coming soon')).toBeTruthy()
     expect(screen.queryByTestId('risk-distribution-chart')).toBeNull()
-    expect(screen.queryByText('Barrier Coverage coming soon')).toBeNull()
-    expect(screen.queryByText('Risk Matrix coming soon')).toBeNull()
   })
 
   it('clicking Drivers & HF renders GlobalShapChart and PifPrevalenceChart', async () => {
@@ -213,22 +189,22 @@ describe('DashboardView', () => {
     expect(driversBtn.className).toContain('border-[#3B82F6]')
   })
 
-  it('switching away from Drivers & HF to Barrier Coverage shows coming soon', async () => {
+  it('switching away from Drivers & HF to Executive Summary hides the chart', async () => {
     await act(async () => {
       renderDashboard()
     })
     fireEvent.click(screen.getByRole('button', { name: 'Drivers & HF' }))
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Barrier Coverage' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Executive Summary' }))
     })
-    expect(screen.getByText('Barrier Coverage coming soon')).toBeTruthy()
     expect(screen.queryByTestId('global-shap-chart')).toBeNull()
+    expect(screen.getByTestId('risk-distribution-chart')).toBeTruthy()
   })
 
   it('inactive tabs have the inactive text colour class', () => {
     renderDashboard()
-    // With Executive Summary active, the other four should carry the inactive colour
-    for (const label of ['Barrier Coverage', 'Incident Trends', 'Risk Matrix', 'Drivers & HF']) {
+    // With Executive Summary active, the other tabs should carry the inactive colour
+    for (const label of ['Drivers & HF', 'Ranked Barriers', 'Evidence']) {
       const btn = screen.getByRole('button', { name: label })
       expect(btn.className).toContain('text-[#5A6178]')
     }

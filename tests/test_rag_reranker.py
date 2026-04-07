@@ -24,6 +24,7 @@ def _make_candidate(incident_id: str, barrier_family: str, rrf: float) -> Retrie
 def _make_barrier_meta(incident_id: str, name: str, role: str, summary: str) -> dict:
     return {
         "incident_id": incident_id,
+        "control_id": f"C-{incident_id}",  # matches _make_candidate's control_id pattern
         "barrier_role_match_text": f"Barrier: {name}\nRole: {role}\nLOD Basis: N/A",
         "barrier_family": "training",
         "incident_summary": summary,

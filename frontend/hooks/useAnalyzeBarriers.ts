@@ -82,7 +82,7 @@ export function useAnalyzeBarriers(): { analyzeAll: () => Promise<void> } {
       setAnalysisError(
         'Backend unavailable. Start the FastAPI server at localhost:8000 and try again.',
       )
-      console.error('Analysis error:', err)
+      if (process.env.NODE_ENV !== 'production') console.error('Analysis error:', err)
     } finally {
       setIsAnalyzing(false)
     }

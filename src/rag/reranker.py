@@ -41,12 +41,13 @@ class CrossEncoderReranker:
     def _find_meta(
         self, candidate: RetrievalResult, barrier_metadata: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        """Find barrier metadata matching a candidate."""
+        """Find barrier metadata matching a candidate by control_id.
+
+        Uses control_id (unique per barrier) instead of incident_id+barrier_family
+        to avoid returning wrong metadata for co-incident barriers with same family.
+        """
         for meta in barrier_metadata:
-            if (
-                meta["incident_id"] == candidate.incident_id
-                and meta.get("barrier_family") == candidate.barrier_family
-            ):
+            if meta.get("control_id") == candidate.control_id:
                 return meta
         return {}
 

@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.modeling.feature_engineering import get_group_kfold_splits
+from src.modeling.feature_engineering import get_group_kfold_splits, CATEGORICAL_FEATURES
 
 # ---------------------------------------------------------------------------
 # Helper: synthetic CSV writer
@@ -35,6 +35,7 @@ _CONTROLS_COLUMNS = [
     "linked_consequence_ids", "barrier_status", "barrier_failed",
     "human_contribution_value", "barrier_failed_human", "confidence",
     "supporting_text_count", "source_agency", "provider_bucket", "json_path",
+    "pathway_sequence", "upstream_failure_rate",
 ]
 
 _INCIDENTS_PIF_COLS = [
@@ -72,66 +73,66 @@ def _make_test_csvs(tmp_path: Path) -> tuple[Path, Path]:
         # incident_id, control_id, name, side, barrier_role, barrier_type,
         # line_of_defense, lod_basis, linked_threat_ids, linked_consequence_ids,
         # barrier_status, barrier_failed, human_contribution_value, barrier_failed_human,
-        # confidence, supporting_text_count, source_agency, provider_bucket, json_path
+        # confidence, supporting_text_count, source_agency, provider_bucket, json_path,
+        # pathway_sequence, upstream_failure_rate
         [
             "inc_1", "c1", "Emergency Shutdown", "prevention", "detection",
             "engineering", "1st", None, None, None,
             "failed", True, "high", True,
-            "high", 3, "BSEE", "bsee", "path/a.json",
+            "high", 3, "BSEE", "bsee", "path/a.json", 1, 0.0,
         ],
         [
             "inc_1", "c2", "Safety Valve", "prevention", "safeguard",
             "engineering", "2nd", None, None, None,
             "active", False, "none", False,
-            "medium", 1, "BSEE", "bsee", "path/a.json",
+            "medium", 1, "BSEE", "bsee", "path/a.json", 2, 1.0,
         ],
         [
             "inc_2", "c3", "Training Program", "mitigation", "mitigation",
             "administrative", "recovery", None, None, None,
             "degraded", True, "medium", True,
-            "medium", 2, "CSB", "csb", "path/b.json",
+            "medium", 2, "CSB", "csb", "path/b.json", 1, 0.0,
         ],
         [
             "inc_3", "c4", "PPE", "prevention", "protection",
             "ppe", "1st", None, None, None,
             "unknown", False, "low", False,
-            "low", 0, "BSEE", "bsee", "path/c.json",
+            "low", 0, "BSEE", "bsee", "path/c.json", 1, 0.0,
         ],
         [
             "inc_4", "c5", "Blowout Preventer", "prevention", "containment",
             "engineering", "3rd", None, None, None,
             "not_installed", False, "none", False,
-            "high", 4, "BSEE", "bsee", "path/d.json",
+            "high", 4, "BSEE", "bsee", "path/d.json", 1, 0.0,
         ],
         [
             "inc_5", "c6", "Spill Response", "mitigation", "recovery",
             "administrative", "recovery", None, None, None,
             "bypassed", False, "medium", True,
-            "medium", 1, "CSB", "csb", "path/e.json",
+            "medium", 1, "CSB", "csb", "path/e.json", 1, 0.5,
         ],
         [
             "inc_6", "c7", "Alarm System", "prevention", "detection",
             "engineering", "1st", None, None, None,
             "worked", False, "none", False,
-            "high", 2, "BSEE", "bsee", "path/f.json",
+            "high", 2, "BSEE", "bsee", "path/f.json", 1, 0.0,
         ],
     ]
 
     controls_df = pd.DataFrame(controls_rows, columns=_CONTROLS_COLUMNS)
 
-    # Build incidents CSV: incident_id + 12 PIF _mentioned booleans
+    # Build incidents CSV: incident_id + primary_threat_category + 12 PIF _mentioned booleans
+    _INCIDENTS_COLUMNS = ["incident_id", "primary_threat_category"] + _INCIDENTS_PIF_COLS
     incidents_rows = [
-        ["inc_1"] + [True] + [False] * 11,   # competence_mentioned=True, rest=False
-        ["inc_2"] + [False] * 12,
-        ["inc_3"] + [False] * 12,
-        ["inc_4"] + [False] * 12,
-        ["inc_5"] + [True, False, True] + [False] * 9,  # competence + communication
-        ["inc_6"] + [False] * 12,
-        ["orphan_inc"] + [False] * 12,
+        ["inc_1", "equipment_failure"] + [True] + [False] * 11,
+        ["inc_2", "process_deviation"] + [False] * 12,
+        ["inc_3", "equipment_failure"] + [False] * 12,
+        ["inc_4", "equipment_failure"] + [False] * 12,
+        ["inc_5", "process_deviation"] + [True, False, True] + [False] * 9,
+        ["inc_6", "equipment_failure"] + [False] * 12,
+        ["orphan_inc", "equipment_failure"] + [False] * 12,
     ]
-    incidents_df = pd.DataFrame(
-        incidents_rows, columns=["incident_id"] + _INCIDENTS_PIF_COLS
-    )
+    incidents_df = pd.DataFrame(incidents_rows, columns=_INCIDENTS_COLUMNS)
 
     controls_path = tmp_path / "controls.csv"
     incidents_path = tmp_path / "incidents.csv"
@@ -363,13 +364,14 @@ def test_encoder_joblib_roundtrip(csvs):
 
     encoder = joblib.load(encoder_path)
 
-    # Verify encoder has 5 category arrays (one per categorical feature).
-    assert len(encoder.categories_) == 5, "Encoder should have 5 category arrays"
+    # Verify encoder has one category array per categorical feature.
+    n_cat = len(CATEGORICAL_FEATURES)
+    assert len(encoder.categories_) == n_cat, f"Encoder should have {n_cat} category arrays"
 
     # Test unknown categories map to -1.
-    unknown_row = [["new_side", "new_type", "4th", "new_family", "NEW_AGENCY"]]
+    unknown_row = [["new_side", "new_type", "4th", "new_family", "NEW_AGENCY", "new_threat"]]
     encoded_unk = encoder.transform(unknown_row)
-    assert encoded_unk.shape == (1, 5), f"Shape mismatch: {encoded_unk.shape}"
+    assert encoded_unk.shape == (1, n_cat), f"Shape mismatch: {encoded_unk.shape}"
     assert (encoded_unk == -1).all(), "All unknowns should encode to -1"
 
 

@@ -14,6 +14,9 @@ from src.rag.retriever import RetrievalResult
 # Prompt template path (per D-04: lives in src/prompts/)
 _PROMPT_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "explain_barrier.md"
 
+# Module-level cache: load the template once to avoid per-request disk reads
+_PROMPT_TEMPLATE: str = _PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+
 # Non-PIF feature display names for LLM prompt context (hardcoded — no YAML exists for these)
 _NON_PIF_DISPLAY_NAMES: dict[str, str] = {
     "source_agency": "Data Source",
@@ -204,7 +207,7 @@ class BarrierExplainer:
         risk_level: str = "",
     ) -> str:
         """Build LLM prompt from template with variable substitution."""
-        template = _PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
+        template = _PROMPT_TEMPLATE
 
         # Build SHAP section (D-03) -- empty string if no SHAP provided
         shap_section = ""

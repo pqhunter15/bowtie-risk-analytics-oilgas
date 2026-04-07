@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from src.rag.config import TOP_K_RERANK
+from src.rag.config import MAX_CONTEXT_CHARS, TOP_K_RERANK
 from src.rag.context_builder import ContextEntry, build_context
 from src.rag.embeddings.base import EmbeddingProvider
 from src.rag.retriever import HybridRetriever, RetrievalResult
@@ -127,7 +127,7 @@ class RAGAgent:
         barrier_failed_human: bool | None = None,
         pif_filters: dict[str, bool] | None = None,
         top_k: int = 10,
-        max_context_chars: int = 8000,
+        max_context_chars: int = MAX_CONTEXT_CHARS,
     ) -> ExplanationResult:
         """Run retrieval and build explanation context.
 

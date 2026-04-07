@@ -5,25 +5,7 @@ import { useBowtieContext } from '@/context/BowtieContext'
 import RiskScoreBadge from './RiskScoreBadge'
 import ShapWaterfall from './ShapWaterfall'
 import EvidenceSection from './EvidenceSection'
-
-// ---------------------------------------------------------------------------
-// Static display names for barrier-category SHAP features (not in degradation_factors)
-// ---------------------------------------------------------------------------
-
-/** Incident-level features that are non-actionable for user-submitted barriers.
- *  Filtered out before passing SHAP arrays to the waterfall chart. */
-const SHAP_HIDDEN_FEATURES = new Set(['source_agency', 'primary_threat_category'])
-
-/** Barrier-category features come from the model but are not mapped via degradation_factors.
- *  These names match the feature_names.json 'barrier' category entries. */
-const BARRIER_FEATURE_DISPLAY_NAMES: Record<string, string> = {
-  source_agency: 'Data Source',
-  barrier_family: 'Barrier Family',
-  side: 'Pathway Position',
-  barrier_type: 'Barrier Type',
-  line_of_defense: 'Line of Defense',
-  supporting_text_count: 'Evidence Volume',
-}
+import { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES as BASE_FEATURE_DISPLAY_NAMES } from '@/lib/shap-config'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -84,7 +66,7 @@ export default function DetailPanel() {
   // State 3: Full analysis view
   const hasModel2 = pred.model2_shap && pred.model2_shap.length > 0
 
-  const featureDisplayNames: Record<string, string> = { ...BARRIER_FEATURE_DISPLAY_NAMES }
+  const featureDisplayNames: Record<string, string> = { ...BASE_FEATURE_DISPLAY_NAMES }
   if (pred.degradation_factors) {
     for (const df of pred.degradation_factors) {
       featureDisplayNames[df.source_feature] = df.factor

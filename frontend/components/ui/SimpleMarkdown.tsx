@@ -38,6 +38,16 @@ function isListBlock(lines: string[]): boolean {
 
 function renderBlock(block: string, blockIdx: number): React.ReactElement | null {
   const lines = block.split('\n')
+
+  // Heading: ## → <h3>, # → <h2>
+  const firstLine = lines[0].trimEnd()
+  if (/^## /.test(firstLine)) {
+    return <h3 key={blockIdx}>{firstLine.replace(/^## /, '')}</h3>
+  }
+  if (/^# /.test(firstLine)) {
+    return <h2 key={blockIdx}>{firstLine.replace(/^# /, '')}</h2>
+  }
+
   if (isListBlock(lines)) {
     const items = lines
       .filter((l) => l.trim() !== '')

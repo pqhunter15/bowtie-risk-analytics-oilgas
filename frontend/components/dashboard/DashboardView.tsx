@@ -17,9 +17,6 @@ import EvidenceView from './EvidenceView'
 
 const TABS = [
   { id: 'executive-summary', label: 'Executive Summary' },
-  { id: 'barrier-coverage', label: 'Barrier Coverage' },
-  { id: 'incident-trends', label: 'Incident Trends' },
-  { id: 'risk-matrix', label: 'Risk Matrix' },
   { id: 'drivers-hf', label: 'Drivers & HF' },
   { id: 'ranked-barriers', label: 'Ranked Barriers' },
   { id: 'evidence', label: 'Evidence' },
@@ -112,15 +109,7 @@ export default function DashboardView() {
         )}
         {activeTab === 'ranked-barriers' && <RankedBarriers />}
         {activeTab === 'evidence' && <EvidenceView />}
-        {activeTab !== 'executive-summary' && activeTab !== 'drivers-hf' && activeTab !== 'ranked-barriers' && activeTab !== 'evidence' && (
-          <div className="flex items-center justify-center h-full">
-            <div className="rounded-lg border border-dashed border-[#2E3348] p-8 text-center">
-              <p className="text-sm text-[#5A6178]">
-                {TABS.find((t) => t.id === activeTab)?.label} coming soon
-              </p>
-            </div>
-          </div>
-        )}
+
       </div>
     </div>
   )

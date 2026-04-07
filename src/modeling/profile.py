@@ -264,7 +264,7 @@ def run_profile(
     for col in PIF_MENTIONED_COLS:
         short_name = col.split("__")[-1]  # e.g. "competence_mentioned"
         if col in merged.columns:
-            pif_bool = merged[col].infer_objects(copy=False).fillna(False).astype(bool)
+            pif_bool = merged[col].infer_objects().fillna(False).astype(bool)
             sparsity = float(pif_bool.mean())
             pif_int = pif_bool.astype(int).to_numpy()
 

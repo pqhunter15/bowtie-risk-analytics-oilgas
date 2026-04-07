@@ -184,7 +184,7 @@ class BarrierPredictor:
 
                 Missing PIFs default to 0.
                 Missing numeric features default to 0.
-                Missing categorical features default to "unknown".
+                Missing categorical features default to "UNKNOWN".
 
         Returns:
             PredictionResult with:
@@ -200,7 +200,7 @@ class BarrierPredictor:
         row_values: list[Any] = []
         for name in self._feature_names:
             if name in cat_set:
-                row_values.append(features_dict.get(name, "unknown"))
+                row_values.append(features_dict.get(name, "UNKNOWN"))
             else:
                 # PIF booleans and numeric features both treated as numeric
                 row_values.append(float(features_dict.get(name, 0)))

@@ -1,3 +1,4 @@
+# LEGACY — V1-era barrier coverage analytics. Superseded by src/modeling/ pipeline.
 from typing import List, Dict, Any
 from src.models.bowtie import Bowtie, Barrier
 from src.models.incident import Incident

@@ -12,6 +12,7 @@ import {
   BARRIER_FAMILIES,
   LINE_OF_DEFENSE,
 } from './constants'
+import { formatBarrierFamily } from '@/lib/format'
 
 // ---------------------------------------------------------------------------
 // Component
@@ -174,7 +175,7 @@ export default function BarrierForm() {
           <option value="">Select family...</option>
           {BARRIER_FAMILIES.map((f) => (
             <option key={f} value={f}>
-              {f.replace(/_/g, ' ')}
+              {formatBarrierFamily(f)}
             </option>
           ))}
         </select>
@@ -243,7 +244,7 @@ export default function BarrierForm() {
           <option value="">Select family...</option>
           {BARRIER_FAMILIES.map((f) => (
             <option key={f} value={f}>
-              {f.replace(/_/g, ' ')}
+              {formatBarrierFamily(f)}
             </option>
           ))}
         </select>

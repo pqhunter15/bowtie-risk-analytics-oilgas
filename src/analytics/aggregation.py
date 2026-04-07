@@ -1,3 +1,4 @@
+# LEGACY — V1-era fleet aggregation analytics. Superseded by src/modeling/ pipeline.
 from typing import List, Dict, Any
 import statistics
 

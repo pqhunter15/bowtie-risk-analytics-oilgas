@@ -37,13 +37,14 @@ def predictor_artifacts(tmp_path: Path):
     n = 50
     feature_names_flat = CATEGORICAL_FEATURES + PIF_FEATURES + NUMERIC_FEATURES
 
-    # Categorical string values for encoder fitting
+    # Categorical string values for encoder fitting (must match CATEGORICAL_FEATURES order)
     cat_values = {
         "side": ["left", "right"],
         "barrier_type": ["engineering", "administrative", "ppe"],
         "line_of_defense": ["1", "2", "3"],
         "barrier_family": ["alarm", "valve", "training_program"],
         "source_agency": ["BSEE", "CSB"],
+        "primary_threat_category": ["equipment_failure", "process_deviation"],
     }
 
     # Fit encoder on string categories
@@ -62,13 +63,16 @@ def predictor_artifacts(tmp_path: Path):
 
     # Build integer-encoded training data (X) for model training
     X = np.zeros((n, len(feature_names_flat)), dtype=float)
+    n_cat = len(CATEGORICAL_FEATURES)
+    n_pif = len(PIF_FEATURES)
     for i, col in enumerate(CATEGORICAL_FEATURES):
         X[:, i] = rng.integers(0, len(cat_values[col]), size=n)
-    # PIF features (indices 5-16)
-    for i in range(len(CATEGORICAL_FEATURES), len(CATEGORICAL_FEATURES) + len(PIF_FEATURES)):
+    # PIF features
+    for i in range(n_cat, n_cat + n_pif):
         X[:, i] = rng.integers(0, 2, size=n)
-    # Numeric (last column)
-    X[:, -1] = rng.integers(0, 10, size=n)
+    # Numeric features (supporting_text_count, pathway_sequence, upstream_failure_rate)
+    for i in range(n_cat + n_pif, len(feature_names_flat)):
+        X[:, i] = rng.integers(0, 10, size=n)
 
     y1 = rng.integers(0, 2, size=n)
     y2 = y1 & rng.integers(0, 2, size=n)
@@ -115,19 +119,19 @@ def _make_raw_features(cat_values: dict[str, list[str]], rng=None) -> dict:
         "line_of_defense": str(rng.choice(cat_values["line_of_defense"])),
         "barrier_family": str(rng.choice(cat_values["barrier_family"])),
         "source_agency": str(rng.choice(cat_values["source_agency"])),
+        "primary_threat_category": str(rng.choice(cat_values["primary_threat_category"])),
         "pif_competence": 1,
-        "pif_fatigue": 0,
         "pif_communication": 1,
         "pif_situational_awareness": 0,
         "pif_procedures": 1,
-        "pif_workload": 0,
-        "pif_time_pressure": 0,
         "pif_tools_equipment": 0,
         "pif_safety_culture": 0,
         "pif_management_of_change": 1,
         "pif_supervision": 0,
         "pif_training": 0,
         "supporting_text_count": 3,
+        "pathway_sequence": 1,
+        "upstream_failure_rate": 0.0,
     }
 
 

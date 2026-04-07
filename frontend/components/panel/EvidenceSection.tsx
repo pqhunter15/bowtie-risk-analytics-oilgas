@@ -58,7 +58,7 @@ export default function EvidenceSection({
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
-        console.error('[EvidenceSection] explain failed for barrier', barrierId, message)
+        if (process.env.NODE_ENV !== 'production') console.error('[EvidenceSection] explain failed for barrier', barrierId, message)
         setError(`Evidence retrieval failed: ${message}`)
       })
       .finally(() => {

@@ -37,24 +37,23 @@ FEATURE_MATRIX_PATH = ARTIFACTS_DIR / "feature_matrix.parquet"
 FEATURE_NAMES_PATH = ARTIFACTS_DIR / "feature_names.json"
 ENCODER_PATH = ARTIFACTS_DIR / "encoder.joblib"
 
-# Five categorical features to OrdinalEncode (per D-01, D-02, D-03).
+# Six categorical features to OrdinalEncode (per D-01, D-02, D-03).
 CATEGORICAL_FEATURES: list[str] = [
     "side",
     "barrier_type",
     "line_of_defense",
     "barrier_family",
     "source_agency",
+    "primary_threat_category",
 ]
 
-# Twelve PIF features (short names for feature matrix columns).
+# Nine PIF features (short names for feature matrix columns).
+# pif_fatigue, pif_workload, pif_time_pressure excluded from training scope.
 PIF_FEATURES: list[str] = [
     "pif_competence",
-    "pif_fatigue",
     "pif_communication",
     "pif_situational_awareness",
     "pif_procedures",
-    "pif_workload",
-    "pif_time_pressure",
     "pif_tools_equipment",
     "pif_safety_culture",
     "pif_management_of_change",
@@ -63,14 +62,12 @@ PIF_FEATURES: list[str] = [
 ]
 
 # Mapping from long incident CSV PIF column names to short feature names.
+# pif_fatigue, pif_workload, pif_time_pressure are excluded from training scope.
 _PIF_COL_MAP: dict[str, str] = {
     "incident__pifs__people__competence_mentioned": "pif_competence",
-    "incident__pifs__people__fatigue_mentioned": "pif_fatigue",
     "incident__pifs__people__communication_mentioned": "pif_communication",
     "incident__pifs__people__situational_awareness_mentioned": "pif_situational_awareness",
     "incident__pifs__work__procedures_mentioned": "pif_procedures",
-    "incident__pifs__work__workload_mentioned": "pif_workload",
-    "incident__pifs__work__time_pressure_mentioned": "pif_time_pressure",
     "incident__pifs__work__tools_equipment_mentioned": "pif_tools_equipment",
     "incident__pifs__organisation__safety_culture_mentioned": "pif_safety_culture",
     "incident__pifs__organisation__management_of_change_mentioned": "pif_management_of_change",
@@ -79,7 +76,7 @@ _PIF_COL_MAP: dict[str, str] = {
 }
 
 # Numeric features (present in controls CSV).
-NUMERIC_FEATURES: list[str] = ["supporting_text_count"]
+NUMERIC_FEATURES: list[str] = ["supporting_text_count", "pathway_sequence", "upstream_failure_rate"]
 
 # Non-PIF features (categorical + numeric) — 6 features for ablation baseline (D-11).
 NON_PIF_FEATURES: list[str] = CATEGORICAL_FEATURES + NUMERIC_FEATURES
@@ -216,7 +213,7 @@ def build_feature_matrix(
     # ------------------------------------------------------------------
     for pif_col in PIF_FEATURES:
         df[pif_col] = (
-            df[pif_col].infer_objects(copy=False).fillna(False).astype(int)
+            df[pif_col].infer_objects().fillna(False).astype(int)
         )
 
     # ------------------------------------------------------------------

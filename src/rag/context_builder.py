@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.rag.config import MAX_CONTEXT_CHARS
+
 
 @dataclass
 class ContextEntry:
@@ -46,7 +48,7 @@ def _format_entry(entry: ContextEntry, result_num: int) -> str:
 
 def build_context(
     entries: list[ContextEntry],
-    max_context_chars: int = 8000,
+    max_context_chars: int = MAX_CONTEXT_CHARS,
 ) -> str:
     """Build structured context text from retrieval results.
 

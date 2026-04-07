@@ -63,7 +63,7 @@ def co_occurrence_crosstab(df: pd.DataFrame) -> pd.DataFrame:
 def human_contribution_summary(df: pd.DataFrame) -> dict:
     """Summary statistics for human contribution and human-caused failures."""
     total = len(df)
-    human_mentioned = df["human_contribution_value"].notna().sum()
+    human_mentioned = (df["human_contribution_value"].notna() & (df["human_contribution_value"] != "")).sum()
     human_failed = df["barrier_failed_human"].sum() if "barrier_failed_human" in df.columns else 0
 
     return {

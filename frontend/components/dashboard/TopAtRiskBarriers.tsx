@@ -2,33 +2,11 @@
 
 import { useBowtieContext } from '@/context/BowtieContext'
 import RiskScoreBadge from '@/components/panel/RiskScoreBadge'
-import { PIF_DISPLAY_NAMES } from '@/lib/types'
+import { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES } from '@/lib/shap-config'
 import type { Barrier, PredictResponse, ShapValue } from '@/lib/types'
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Incident-level features that are non-actionable — excluded from top factor selection.
- *  Matches SHAP_HIDDEN_FEATURES in DetailPanel.tsx. */
-export const SHAP_HIDDEN_FEATURES = new Set(['source_agency', 'primary_threat_category'])
-
-/** Display names for barrier-category SHAP features (mirrors BARRIER_FEATURE_DISPLAY_NAMES
- *  in DetailPanel.tsx) merged with PIF display names from lib/types.ts. */
-export const FEATURE_DISPLAY_NAMES: Record<string, string> = {
-  // Barrier-category features
-  source_agency: 'Data Source',
-  barrier_family: 'Barrier Family',
-  side: 'Pathway Position',
-  barrier_type: 'Barrier Type',
-  line_of_defense: 'Line of Defense',
-  supporting_text_count: 'Evidence Volume',
-  // Numeric incident features
-  pathway_sequence: 'Pathway Sequence',
-  upstream_failure_rate: 'Upstream Failure Rate',
-  // PIF features (from lib/types.ts PIF_DISPLAY_NAMES)
-  ...(PIF_DISPLAY_NAMES as Record<string, string>),
-}
+// Re-export for downstream consumers (RankedBarriers imports from here)
+export { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES }
 
 // ---------------------------------------------------------------------------
 // Pure function
