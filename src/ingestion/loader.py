@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 from typing import Optional
-from src.models.incident import Incident
+from src._legacy.incident import Incident
 
 def load_incident_from_text(text: str) -> Incident:
     """

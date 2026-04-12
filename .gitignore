@@ -108,3 +108,12 @@ vendor/
 coverage/
 .cache/
 tmp/
+
+# --- frontend build cache ---
+.vite/
+
+# --- Windows alternate data streams ---
+*:Zone.Identifier
+
+# --- legacy source quarantine ---
+src/_legacy/

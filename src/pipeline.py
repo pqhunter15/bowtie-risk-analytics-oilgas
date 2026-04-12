@@ -24,9 +24,9 @@ from src.ingestion.manifests import (
 from src.ingestion.pdf_text import process_incident_manifest
 from src.ingestion.sources.csb import discover_csb_incidents, download_csb_pdf
 from src.ingestion.sources.bsee import discover_bsee_incidents, download_bsee_pdf
-from src.models.incident import Incident
-from src.models.bowtie import Bowtie
-from src.analytics.engine import calculate_barrier_coverage, identify_gaps
+from src._legacy.incident import Incident
+from src._legacy.bowtie import Bowtie
+from src._legacy.engine import calculate_barrier_coverage, identify_gaps
 from src.analytics.aggregation import calculate_fleet_metrics
 from src.analytics.build_combined_exports import build_all as build_combined_all
 from src.ingestion.structured import (

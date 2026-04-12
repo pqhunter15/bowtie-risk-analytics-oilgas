@@ -1,6 +1,6 @@
 from datetime import date
 import pytest
-from src.models.incident import Incident
+from src._legacy.incident import Incident
 
 class TestIncident:
     def test_create_minimal(self):

@@ -1,7 +1,7 @@
 
 import pytest
 from pydantic import ValidationError
-from src.models.bowtie import Threat, Barrier, Consequence, Bowtie
+from src._legacy.bowtie import Threat, Barrier, Consequence, Bowtie
 
 class TestThreat:
     """Test cases for the Threat model."""

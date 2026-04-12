@@ -1,7 +1,7 @@
 
 import pytest
 from src.ingestion.loader import load_incident_from_text
-from src.models.incident import Incident
+from src._legacy.incident import Incident
 
 class TestIngestion:
     """Test cases for data ingestion."""

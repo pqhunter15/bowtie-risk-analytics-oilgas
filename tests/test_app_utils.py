@@ -1,7 +1,7 @@
 import pytest
 import json
 from pathlib import Path
-from src.app.utils import load_data
+from src._legacy.utils import load_data
 
 def test_load_data_returns_empty_when_no_data(tmp_path):
     # Given an empty directory

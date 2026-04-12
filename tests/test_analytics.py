@@ -1,8 +1,8 @@
 
 import pytest
-from src.models.bowtie import Bowtie, Threat, Barrier, Consequence
-from src.models.incident import Incident
-from src.analytics.engine import calculate_barrier_coverage, identify_gaps
+from src._legacy.bowtie import Bowtie, Threat, Barrier, Consequence
+from src._legacy.incident import Incident
+from src._legacy.engine import calculate_barrier_coverage, identify_gaps
 
 @pytest.fixture
 def sample_bowtie():
