@@ -32,6 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 
 from src.api.mapping_loader import MappingConfig
+from src.api.sanitize import sanitize_prompt_input
 from src.api.schemas import (
     AprioriRule,
     AprioriRulesResponse,
@@ -360,12 +361,16 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
         """
         explainer: BarrierExplainer = req.app.state.explainer
 
+        # Sanitize user-provided text before it reaches the LLM prompt (M-06)
+        safe_barrier_type = sanitize_prompt_input(request.barrier_type)
+        safe_barrier_family = sanitize_prompt_input(request.barrier_family)
+        safe_barrier_role = sanitize_prompt_input(request.barrier_role)
+        safe_event_description = sanitize_prompt_input(request.event_description)
+
         # Build barrier query matching corpus text structure for better cosine similarity.
-        # Corpus format: "Barrier: {name}\nRole: {role}\nLOD Basis: {basis}"
-        # We use barrier_type + barrier_family as a proxy for barrier name (not in request).
         barrier_query = (
-            f"Barrier: {request.barrier_type} - {request.barrier_family}\n"
-            f"Role: {request.barrier_role}"
+            f"Barrier: {safe_barrier_type} - {safe_barrier_family}\n"
+            f"Role: {safe_barrier_role}"
         )
         logger.info(
             "explain: barrier_family=%s query_len=%d",
@@ -374,7 +379,7 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
         )
 
         # Build incident query from event_description (text describing the incident)
-        incident_query = request.event_description
+        incident_query = safe_event_description
 
         # Convert ShapValue list to dict[str, float] for BarrierExplainer (D-03)
         shap_dict: dict[str, float] | None = None
@@ -402,7 +407,7 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
                 incident_query=incident_query,
                 shap_factors=shap_dict,
                 risk_level=risk_level_str,
-                barrier_family=request.barrier_family,
+                barrier_family=safe_barrier_family,
             )
         except Exception as exc:
             logger.exception("Explain failed: %s", exc)
