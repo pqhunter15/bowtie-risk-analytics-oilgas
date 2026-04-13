@@ -23,6 +23,9 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id']
 
+const TRAINING_INCIDENTS = 174
+const TRAINING_BARRIERS = 558
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -135,11 +138,11 @@ export default function DashboardView() {
                         <p className="text-xs text-[#5A6178]">Prevention / Mitigation</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-[#E8ECF4]">174</p>
+                        <p className="text-2xl font-bold text-[#E8ECF4]">{TRAINING_INCIDENTS}</p>
                         <p className="text-xs text-[#5A6178]">Reference incidents</p>
                       </div>
                       <div>
-                        <p className="text-2xl font-bold text-[#E8ECF4]">558</p>
+                        <p className="text-2xl font-bold text-[#E8ECF4]">{TRAINING_BARRIERS}</p>
                         <p className="text-xs text-[#5A6178]">Barrier observations</p>
                       </div>
                     </div>
@@ -159,9 +162,9 @@ export default function DashboardView() {
               <h3 className="text-sm font-semibold text-[#E8ECF4] mb-2">Assessment Basis</h3>
               <p className="text-sm text-[#8B93A8] leading-relaxed">
                 Historical reliability assessment based on analysis of{' '}
-                <span className="text-[#E8ECF4] font-medium">174 real BSEE/CSB incidents</span>{' '}
+                <span className="text-[#E8ECF4] font-medium">{TRAINING_INCIDENTS} real BSEE/CSB incidents</span>{' '}
                 with{' '}
-                <span className="text-[#E8ECF4] font-medium">558 barrier observations</span>{' '}
+                <span className="text-[#E8ECF4] font-medium">{TRAINING_BARRIERS} barrier observations</span>{' '}
                 from Loss of Containment events in oil &amp; gas operations.
                 Barrier failure patterns identified using XGBoost with SHAP explainability,
                 validated through 5-fold cross-validation.
