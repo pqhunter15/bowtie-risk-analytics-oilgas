@@ -220,7 +220,7 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
             result = predictor.predict(features)
         except Exception as exc:
             logger.exception("Prediction failed: %s", exc)
-            raise HTTPException(status_code=422, detail=str(exc))
+            raise HTTPException(status_code=422, detail="Prediction failed due to invalid input")
 
         # Convert SHAP dicts to ShapValue lists with category metadata
         feature_meta = predictor.feature_names  # list[dict] with name + category
@@ -412,7 +412,7 @@ def create_app(lifespan_override: Any = None) -> FastAPI:
             )
         except Exception as exc:
             logger.exception("Explain failed: %s", exc)
-            raise HTTPException(status_code=500, detail=str(exc))
+            raise HTTPException(status_code=500, detail="Evidence generation failed")
 
         # Convert Citation objects to CitationResponse Pydantic models
         citations = [
