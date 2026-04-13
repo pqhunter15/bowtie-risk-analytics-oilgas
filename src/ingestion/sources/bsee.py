@@ -4,7 +4,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterator
 from urllib.parse import urljoin
 
 import requests

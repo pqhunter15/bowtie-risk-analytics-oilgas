@@ -5,7 +5,6 @@ import logging
 import time
 from typing import Any
 
-import numpy as np
 from sentence_transformers import CrossEncoder
 
 from src.rag.config import FINAL_TOP_K, RERANKER_BATCH_SIZE, RERANKER_MAX_LENGTH, RERANKER_MODEL

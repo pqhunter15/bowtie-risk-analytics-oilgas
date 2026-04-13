@@ -288,7 +288,7 @@ def run_with_extraction_manifest(
     false_count = len(df[df["final_label"] == "FALSE"])
     failed = len(df[df["final_label"] == "EXTRACTION_FAILED"])
 
-    print(f"\n===== LOC Scoring Summary =====")
+    print("\n===== LOC Scoring Summary =====")
     print(f"  Total documents      : {total}")
     print(f"  OK scored            : {ok_scored} (TRUE={true_count}, FALSE={false_count})")
     print(f"  EXTRACTION_FAILED    : {failed}")

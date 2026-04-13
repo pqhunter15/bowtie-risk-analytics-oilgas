@@ -122,3 +122,6 @@ tmp/
 
 # --- legacy source quarantine ---
 src/_legacy/
+
+# ── GSD baseline (auto-generated) ──
+.gsd

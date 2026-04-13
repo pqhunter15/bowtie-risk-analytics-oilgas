@@ -1,7 +1,7 @@
 """Manifest models for tracking incident acquisition and text extraction."""
 import csv
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
 

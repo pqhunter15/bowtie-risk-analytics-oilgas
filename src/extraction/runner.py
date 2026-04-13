@@ -133,7 +133,7 @@ def run_extraction_qc(
     ok_count = sum(1 for r in merged if r.extraction_status == "OK")
     fail_count = sum(1 for r in merged if r.extraction_status == "EXTRACTION_FAILED")
 
-    logger.info(f"\n===== Extraction QC Summary =====")
+    logger.info("\n===== Extraction QC Summary =====")
     logger.info(f"  Total PDFs found   : {len(pdfs)}")
     logger.info(f"  Skipped (existing) : {skipped}")
     logger.info(f"  Processed          : {len(new_rows)}")

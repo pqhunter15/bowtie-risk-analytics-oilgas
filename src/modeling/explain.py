@@ -30,7 +30,6 @@ from sklearn.metrics import f1_score, matthews_corrcoef
 from src.modeling.feature_engineering import (
     ARTIFACTS_DIR,
     FEATURE_MATRIX_PATH,
-    FEATURE_NAMES_PATH,
     CATEGORICAL_FEATURES,
     PIF_FEATURES,
     NUMERIC_FEATURES,

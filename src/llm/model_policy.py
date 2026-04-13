@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Set, Optional
+from typing import List, Set
 
 import yaml
 
