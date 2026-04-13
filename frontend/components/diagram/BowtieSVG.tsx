@@ -55,8 +55,6 @@ const MIT_START_X = TOP_EVENT_CX + TOP_EVENT_R + 100 // unused after Task 1 — 
 const CONSEQUENCE_X = 1300
 const CONSEQUENCE_W = 200
 const CONSEQUENCE_H = 90
-const HAZARD_W = 170
-const HAZARD_H = 72
 
 const BLUE = '#0000EE'
 const DARK_BLUE = '#0000CC'
@@ -87,9 +85,9 @@ function typeInfo(t: string): { color: string; label: string } {
     case 'engineering':
       return { color: '#3B82F6', label: 'Engineered' }
     case 'administrative':
-      return { color: '#8B5CF6', label: 'Administrative' }
+      return { color: '#94A3B8', label: 'Administrative' }
     case 'ppe':
-      return { color: '#EC4899', label: 'Behavioural' }
+      return { color: '#22C55E', label: 'Behavioural' }
     case 'active_human':
       return { color: '#14B8A6', label: 'Active Human' }
     case 'active_hw_human':
@@ -285,10 +283,6 @@ export default function BowtieSVG({
 
   const { H, CY, tPos, cPos, bPos, prevByThreat, mitByConsequence } = layout
 
-  // Hazard box position
-  const hazardX = TOP_EVENT_CX - HAZARD_W / 2
-  const hazardY = CY - TOP_EVENT_R - 15 - HAZARD_H
-
   // Top event text lines
   const teLines = wrapText(topEvent, 12)
 
@@ -379,20 +373,6 @@ export default function BowtieSVG({
           style={{ fontFamily: 'Arial, sans-serif', display: 'block' }}
         >
           <defs>
-            <pattern
-              id="hazard"
-              width="14"
-              height="14"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(45)"
-            >
-              <rect width="14" height="14" fill="#F5C518" />
-              <rect width="7" height="14" fill="#1A1A1A" />
-            </pattern>
-            <radialGradient id="orb">
-              <stop offset="0%" stopColor="#F97316" />
-              <stop offset="100%" stopColor="#DC2626" />
-            </radialGradient>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="3" result="coloredBlur" />
               <feMerge>
@@ -592,65 +572,21 @@ export default function BowtieSVG({
           })}
 
           {/* ===== LAYER 5: Top Event ===== */}
-          {/* Hazard box (above circle) */}
-          <rect
-            x={hazardX}
-            y={hazardY}
-            width={HAZARD_W}
-            height={HAZARD_H}
-            fill="url(#hazard)"
-            stroke="#333"
-            strokeWidth={2}
-          />
-          <rect
-            x={hazardX + 8}
-            y={hazardY + 8}
-            width={HAZARD_W - 16}
-            height={HAZARD_H - 16}
-            fill="white"
-            stroke="#333"
-            strokeWidth={1}
-          />
-          {wrapText(topEvent, 22).map((line, i) => (
-            <text
-              key={`hz-${i}`}
-              x={TOP_EVENT_CX}
-              y={hazardY + 24 + i * 14}
-              textAnchor="middle"
-              fill={BLUE}
-              fontSize={11}
-              fontWeight={700}
-            >
-              {line}
-            </text>
-          ))}
-
-          {/* Gradient circle */}
           <circle
             cx={TOP_EVENT_CX}
             cy={CY}
             r={TOP_EVENT_R}
-            fill="url(#orb)"
-            stroke="#333"
+            fill="#FF6B00"
+            stroke="#CC5500"
             strokeWidth={2}
-          />
-          {/* Inner white rect */}
-          <rect
-            x={TOP_EVENT_CX - 45}
-            y={CY - 36}
-            width={90}
-            height={72}
-            fill="white"
-            stroke="#444"
-            strokeWidth={1.5}
           />
           {teLines.slice(0, 3).map((line, i) => (
             <text
               key={`te-${i}`}
               x={TOP_EVENT_CX}
-              y={CY - 16 + i * 16}
+              y={CY - 12 + i * 16}
               textAnchor="middle"
-              fill="#1A1A1A"
+              fill="white"
               fontSize={13}
               fontWeight={700}
             >
@@ -659,9 +595,9 @@ export default function BowtieSVG({
           ))}
           <text
             x={TOP_EVENT_CX}
-            y={CY + 30}
+            y={CY + 34}
             textAnchor="middle"
-            fill="#999"
+            fill="rgba(255,255,255,0.7)"
             fontSize={9}
           >
             (Top Event)
@@ -677,16 +613,23 @@ export default function BowtieSVG({
                   y={c.y}
                   width={CONSEQUENCE_W}
                   height={CONSEQUENCE_H}
-                  fill="#DC2626"
-                  stroke="#B91C1C"
-                  strokeWidth={2}
+                  fill="white"
+                  stroke="#CC0000"
+                  strokeWidth={1.5}
+                />
+                <rect
+                  x={c.x}
+                  y={c.y}
+                  width={6}
+                  height={CONSEQUENCE_H}
+                  fill="#CC0000"
                 />
                 {nameLines.map((line, li) => (
                   <text
                     key={li}
                     x={c.x + 18}
                     y={c.y + 24 + li * 18}
-                    fill="white"
+                    fill="#CC0000"
                     fontSize={14}
                     fontWeight={700}
                   >
