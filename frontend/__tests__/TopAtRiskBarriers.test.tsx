@@ -52,9 +52,10 @@ function makeShap(feature: string, value: number): ShapValue {
 // ---------------------------------------------------------------------------
 
 describe('SHAP_HIDDEN_FEATURES', () => {
-  it('contains source_agency and primary_threat_category', () => {
-    expect(SHAP_HIDDEN_FEATURES.has('source_agency')).toBe(true)
+  it('contains primary_threat_category (source_agency removed from model)', () => {
     expect(SHAP_HIDDEN_FEATURES.has('primary_threat_category')).toBe(true)
+    // source_agency is no longer in the model — not needed in the hidden set
+    expect(SHAP_HIDDEN_FEATURES.has('source_agency')).toBe(false)
   })
 })
 
@@ -111,10 +112,9 @@ describe('buildTopAtRiskBarriers', () => {
     expect(result[0].topFactor?.value).toBe(-0.3)
   })
 
-  it('excludes hidden features (source_agency, primary_threat_category) from top factor selection', () => {
+  it('excludes hidden features (primary_threat_category) from top factor selection', () => {
     const b = makeBarrier()
     const shap: ShapValue[] = [
-      makeShap('source_agency', 0.99),          // hidden — should be excluded
       makeShap('primary_threat_category', 0.8), // hidden — should be excluded
       makeShap('barrier_type', 0.2),            // visible — should win
     ]
@@ -133,8 +133,7 @@ describe('buildTopAtRiskBarriers', () => {
   it('returns topFactor null when all shap entries are hidden', () => {
     const b = makeBarrier()
     const shap: ShapValue[] = [
-      makeShap('source_agency', 0.99),
-      makeShap('primary_threat_category', 0.8),
+      makeShap('primary_threat_category', 0.8), // the only hidden feature in the model
     ]
     const predictions = { [b.id]: makePrediction(0.5, shap) }
     const result = buildTopAtRiskBarriers([b], predictions)

@@ -59,11 +59,11 @@ export const BARRIER_FAMILIES = [
 ] as const
 
 // ---------------------------------------------------------------------------
-// Demo scenario (Loss of Containment — LOC) per UI-SPEC Demo Scenario Spec
-// 4 prevention barriers + 1 mitigation barrier
-// barrier_type uses encoder values: 'mechanical' is not a valid encoder value;
-// mapped to 'engineering' (closest structural equivalent)
-// barrier_family uses closest matching encoder family values
+// Demo scenario (Loss of Containment — LOC)
+// 5 prevention + 2 mitigation = 7 barriers.
+// Designed for risk spread: engineering barriers score Low, administrative
+// barriers (monitoring, procedures) at higher LOD score Medium/High.
+// barrier_type/barrier_family use exact encoder values from encoder.joblib.
 // ---------------------------------------------------------------------------
 
 export const DEMO_SCENARIO = {
@@ -75,15 +75,7 @@ export const DEMO_SCENARIO = {
       barrier_type: 'engineering' as const,
       barrier_family: 'pressure_relief_blowdown_flare_disposal',
       line_of_defense: '1st' as const,
-      barrierRole: 'Prevent overpressure',
-    },
-    {
-      name: 'Operator Pre-transfer Checklist',
-      side: 'prevention' as const,
-      barrier_type: 'administrative' as const,
-      barrier_family: 'procedures',
-      line_of_defense: '2nd' as const,
-      barrierRole: 'Verify line integrity',
+      barrierRole: 'Prevent overpressure beyond design limits',
     },
     {
       name: 'Automatic Shutdown System',
@@ -91,15 +83,31 @@ export const DEMO_SCENARIO = {
       barrier_type: 'engineering' as const,
       barrier_family: 'emergency_shutdown_isolation',
       line_of_defense: '1st' as const,
-      barrierRole: 'Isolate on high pressure',
+      barrierRole: 'Isolate on high pressure signal',
     },
     {
-      name: 'Leak Detection System',
+      name: 'Operator Monitoring Procedure',
+      side: 'prevention' as const,
+      barrier_type: 'administrative' as const,
+      barrier_family: 'monitoring',
+      line_of_defense: '3rd' as const,
+      barrierRole: 'Manual monitoring of pressure and flow readings during transfer',
+    },
+    {
+      name: 'Pre-Transfer Safety Checklist',
+      side: 'prevention' as const,
+      barrier_type: 'administrative' as const,
+      barrier_family: 'procedures',
+      line_of_defense: '2nd' as const,
+      barrierRole: 'Verify valve alignment and line integrity before operations',
+    },
+    {
+      name: 'Gas Detection System',
       side: 'prevention' as const,
       barrier_type: 'engineering' as const,
-      barrier_family: 'detection_monitoring_alarms',
+      barrier_family: 'gas_detection_atmospheric_monitoring',
       line_of_defense: '2nd' as const,
-      barrierRole: 'Detect early release',
+      barrierRole: 'Detect gas release in transfer area',
     },
     {
       name: 'Emergency Response Plan',
@@ -107,7 +115,15 @@ export const DEMO_SCENARIO = {
       barrier_type: 'administrative' as const,
       barrier_family: 'emergency_preparedness_planning_training_drills',
       line_of_defense: '1st' as const,
-      barrierRole: 'Coordinate emergency response',
+      barrierRole: 'Coordinate emergency response and evacuation',
+    },
+    {
+      name: 'Fire Suppression System',
+      side: 'mitigation' as const,
+      barrier_type: 'engineering' as const,
+      barrier_family: 'active_fire_protection_firefighting',
+      line_of_defense: '1st' as const,
+      barrierRole: 'Suppress fire from ignited gas release',
     },
   ],
 }

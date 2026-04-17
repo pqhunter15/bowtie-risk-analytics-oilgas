@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useBowtieContext } from '@/context/BowtieContext'
 import RiskScoreBadge from './RiskScoreBadge'
 import ShapWaterfall from './ShapWaterfall'
 import EvidenceSection from './EvidenceSection'
 import { SHAP_HIDDEN_FEATURES, FEATURE_DISPLAY_NAMES as BASE_FEATURE_DISPLAY_NAMES } from '@/lib/shap-config'
+import { explain } from '@/lib/api'
+import type { ExplainRequest } from '@/lib/types'
 
 // ---------------------------------------------------------------------------
 // Tabs
@@ -24,8 +26,38 @@ type TabId = (typeof TABS)[number]['id']
 // ---------------------------------------------------------------------------
 
 export default function DetailPanel() {
-  const { selectedBarrierId, barriers, predictions, eventDescription, setViewMode, setDashboardTab } = useBowtieContext()
+  const { selectedBarrierId, barriers, predictions, eventDescription, setViewMode, setDashboardTab, evidence, setEvidence } = useBowtieContext()
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+
+  // Derive barrier and pred before hooks so the auto-load effect can reference them.
+  const barrier = barriers.find((b) => b.id === selectedBarrierId)
+  const pred = selectedBarrierId ? predictions[selectedBarrierId] : undefined
+
+  // Pre-load evidence when a barrier with a prediction is selected — by the time
+  // the user clicks the Evidence tab the data is already in context.
+  useEffect(() => {
+    if (!selectedBarrierId || !barrier || !pred || evidence[selectedBarrierId]) return
+
+    let cancelled = false
+    const req: ExplainRequest = {
+      barrier_family: barrier.barrier_family,
+      barrier_type: barrier.barrier_type,
+      side: barrier.side,
+      barrier_role: barrier.barrierRole,
+      event_description: eventDescription,
+      shap_factors: pred.model1_shap,
+      risk_level: pred.risk_level || '',
+    }
+
+    explain(req)
+      .then((r) => { if (!cancelled) setEvidence(selectedBarrierId, r) })
+      .catch(() => { /* EvidenceSection renders its own error when evidence is absent */ })
+
+    return () => { cancelled = true }
+  // pred != null captures the transition from unanalyzed → analyzed without
+  // needing the full pred object as a dependency (avoids stale-closure issues).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBarrierId, pred != null])
 
   // State 1: No barrier selected
   if (!selectedBarrierId) {
@@ -38,8 +70,6 @@ export default function DetailPanel() {
     )
   }
 
-  const barrier = barriers.find((b) => b.id === selectedBarrierId)
-
   if (!barrier) {
     return (
       <div className="h-full flex items-start pt-8 justify-center">
@@ -49,8 +79,6 @@ export default function DetailPanel() {
       </div>
     )
   }
-
-  const pred = predictions[selectedBarrierId]
 
   // State 2: Barrier selected but not yet analyzed
   if (!pred) {

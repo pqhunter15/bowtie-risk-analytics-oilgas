@@ -78,17 +78,15 @@ describe('buildGlobalShapData', () => {
     expect(result[0].feature).toBe('Barrier Family')
   })
 
-  it('excludes source_agency and primary_threat_category', () => {
+  it('excludes primary_threat_category (source_agency removed from model)', () => {
     const pred = makePrediction([
-      makeShap('source_agency', 0.99),
-      makeShap('primary_threat_category', 0.8),
-      makeShap('barrier_type', 0.2),
+      makeShap('primary_threat_category', 0.8), // hidden — should be excluded
+      makeShap('barrier_type', 0.2),            // visible — should appear as display name
     ])
     const result = buildGlobalShapData({ b1: pred })
     const features = result.map((e: GlobalShapEntry) => e.feature)
-    expect(features).not.toContain('Data Source')
-    expect(features).not.toContain('source_agency')
     expect(features).not.toContain('primary_threat_category')
+    expect(features).not.toContain('Threat Category')
     expect(features).toContain('Barrier Type')
   })
 
