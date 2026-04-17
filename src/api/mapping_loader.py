@@ -33,7 +33,7 @@ class MappingConfig:
     @staticmethod
     def load(
         mappings_dir: str | Path = "configs/mappings",
-        thresholds_path: str | Path = "data/models/artifacts/risk_thresholds.json",
+        thresholds_path: str | Path = "configs/risk_thresholds.json",
     ) -> MappingConfig:
         """Load all mapping configs from YAML files and risk thresholds JSON.
 

@@ -1,0 +1,5 @@
+{
+  "p60": 0.45,
+  "p80": 0.70,
+  "description": "Domain-meaningful cutpoints for inference-time user-entered barriers. Low: p<0.45; Medium: 0.45-0.70; High: p>=0.70. Replaces prior quantile cutoffs that were too high for user-entered inference (probabilities rarely exceed 0.85)."
+}
