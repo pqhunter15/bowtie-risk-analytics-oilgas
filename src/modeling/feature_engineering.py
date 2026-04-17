@@ -37,13 +37,14 @@ FEATURE_MATRIX_PATH = ARTIFACTS_DIR / "feature_matrix.parquet"
 FEATURE_NAMES_PATH = ARTIFACTS_DIR / "feature_names.json"
 ENCODER_PATH = ARTIFACTS_DIR / "encoder.joblib"
 
-# Six categorical features to OrdinalEncode (per D-01, D-02, D-03).
+# Five categorical features to OrdinalEncode (per D-01, D-02, D-03).
+# source_agency dropped: user-entered barriers default to UNKNOWN (unseen by encoder),
+# biasing predictions toward base rate. Hidden from UI anyway.
 CATEGORICAL_FEATURES: list[str] = [
     "side",
     "barrier_type",
     "line_of_defense",
     "barrier_family",
-    "source_agency",
     "primary_threat_category",
 ]
 
