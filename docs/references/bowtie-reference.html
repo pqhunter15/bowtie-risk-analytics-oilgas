@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BowTie Diagram — Loss of Containment</title>
+<style>
+  * { margin: 0; padding: 0; }
+  html, body { background: #E8E8E8; }
+</style>
+</head>
+<body>
+<script>
+// ==================== DYNAMIC LAYOUT ALGORITHM ====================
+
+const data = {
+  threats: 3,
+  maxPrevBarriers: 2,
+  consequences: 3,
+  maxMitBarriers: 1
+};
+
+// Canvas
+const CW = 1800;
+const rowH = 160;
+const CH = Math.max(600, (Math.max(data.threats, data.consequences) + 1) * rowH + 40);
+
+// Center + dynamic vertical centering
+// Map window aspect ratio into SVG coordinate space so diagram centers vertically
+const winW = window.outerWidth || 1280;
+const winH = window.outerHeight || 672;
+const svgH = Math.round(winH / winW * CW);
+const topPad = Math.max(20, (svgH - CH) / 2);
+const cx = CW / 2;
+const cy = CH / 2 + topPad;
+
+// Element sizes
+const threatBoxW = 150, threatBoxH = 70;
+const barrierBoxW = 130, barrierBoxH = 75;
+const consBoxW = 150, consBoxH = 70;
+const topEventR = 80;
+const padding = 60;
+
+// Horizontal zones
+const threatX = padding;
+const leftBarrierStart = threatX + threatBoxW + 40;
+const leftBarrierEnd = cx - topEventR - 60;
+const rightBarrierStart = cx + topEventR + 60;
+const rightBarrierEnd = CW - padding - consBoxW - 40;
+const consX = CW - padding - consBoxW;
+
+// Vertical distribution
+function threatCenterY(i) {
+  return (CH / (data.threats + 1)) * (i + 1) + topPad;
+}
+function consCenterY(j) {
+  return (CH / (data.consequences + 1)) * (j + 1) + topPad;
+}
+
+// Barrier X positions within a zone
+function barrierPositions(zoneStart, zoneEnd, count) {
+  const positions = [];
+  for (let k = 0; k < count; k++) {
+    positions.push(zoneStart + (zoneEnd - zoneStart) / (count + 1) * (k + 1) - barrierBoxW / 2);
+  }
+  return positions;
+}
+
+// Threat data
+const threats = [
+  { label: ['Equipment', 'overpressure'], barriers: [['Pressure Relief', 'Valve'], ['Leak Detection', 'System']] },
+  { label: ['Overheating of', 'equipment'], barriers: [['Operator', 'Pre-transfer', 'Checklist']] },
+  { label: ['Operator error', 'during transfer'], barriers: [['Automatic', 'Shutdown', 'System']] }
+];
+
+const consequences = [
+  { label: ['Gas release /', 'toxic exposure'] },
+  { label: ['Explosive failure', 'of equipment'] },
+  { label: ['Fire /', 'explosion'] }
+];
+
+// Pre-calculate positions (barrier zones computed after fan connection points)
+let threatPositions, consPositions;
+
+// Hazard position
+const hazardW = 180, hazardH = 60;
+const hazardX = cx - hazardW / 2;
+const hazardY = cy - topEventR - 80;
+
+// ==================== BUILD SVG ====================
+
+let svg = '';
+
+// Defs
+svg += `<defs>
+  <radialGradient id="topEventGrad" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#FF8C00"/>
+    <stop offset="100%" stop-color="#CC2200"/>
+  </radialGradient>
+  <radialGradient id="threatGrad" cx="50%" cy="50%" r="70%">
+    <stop offset="0%" stop-color="#2979FF"/>
+    <stop offset="100%" stop-color="#0D47A1"/>
+  </radialGradient>
+  <radialGradient id="consequenceGrad" cx="50%" cy="50%" r="70%">
+    <stop offset="0%" stop-color="#FF1744"/>
+    <stop offset="100%" stop-color="#B71C1C"/>
+  </radialGradient>
+  <pattern id="hazardStripe" width="14.14" height="14.14" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="7.07" height="14.14" fill="#FFD700"/>
+    <rect x="7.07" width="7.07" height="14.14" fill="#000"/>
+  </pattern>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; dominant-baseline: central; text-anchor: middle; }
+  </style>
+</defs>`;
+
+// Canvas background (full viewBox height)
+svg += `<rect x="0" y="0" width="${CW}" height="${svgH}" fill="#E8E8E8"/>`;
+
+// ==================== FAN CONNECTION POINTS ====================
+
+// Distribute connection points around top event perimeter
+const fanAngles = [-50, 0, 50]; // degrees from 9-o'clock (left) and 3-o'clock (right)
+
+// Left side (prevention): angles measured from 180° (9-o'clock)
+const leftConnects = fanAngles.map(a => {
+  const rad = (180 + a) * Math.PI / 180;
+  return { x: cx + topEventR * Math.cos(rad), y: cy + topEventR * Math.sin(rad) };
+});
+
+// Right side (mitigation): angles measured from 0° (3-o'clock)
+const rightConnects = fanAngles.map(a => {
+  const rad = a * Math.PI / 180;
+  return { x: cx + topEventR * Math.cos(rad), y: cy + topEventR * Math.sin(rad) };
+});
+
+// Pre-calculate positions using per-threat barrier zones
+threatPositions = threats.map((t, i) => {
+  const tcy = threatCenterY(i);
+  const lc = leftConnects[i];
+  const lbStart = threatX + threatBoxW + 30;
+  const lbEnd = lc.x - barrierBoxW / 2 - 20;
+  const bxPositions = barrierPositions(lbStart, lbEnd, t.barriers.length);
+  return { cy: tcy, barrierXs: bxPositions };
+});
+
+consPositions = consequences.map((c, j) => {
+  const ccy = consCenterY(j);
+  const rc = rightConnects[j];
+  const rbStart = rc.x + 20;
+  const rbEnd = consX - 30;
+  const bxPositions = barrierPositions(rbStart, rbEnd, 1);
+  return { cy: ccy, barrierXs: bxPositions };
+});
+
+// ==================== PATHWAY LINES ====================
+
+// Prevention side — line passes THROUGH each barrier box, then Bezier to top event
+threatPositions.forEach((tp, i) => {
+  const tRightEdge = threatX + threatBoxW + 14;
+  const lastBarrierRight = tp.barrierXs[tp.barrierXs.length - 1] + barrierBoxW;
+  const lc = leftConnects[i];
+  const horizontalEndX = lastBarrierRight + 30;
+
+  // Build one continuous path: threat tab → through each barrier → past last barrier → Bezier to circle
+  let pathD = `M ${tRightEdge},${tp.cy}`;
+  tp.barrierXs.forEach(bx => {
+    pathD += ` L ${bx},${tp.cy}`;                     // enter barrier left center
+    pathD += ` L ${bx + barrierBoxW},${tp.cy}`;       // exit barrier right center
+  });
+  pathD += ` L ${horizontalEndX},${tp.cy}`;           // continue past last barrier
+
+  // Bezier from horizontal end to top event perimeter point
+  const cpX = (horizontalEndX + lc.x) / 2;
+  pathD += ` C ${cpX},${tp.cy} ${cpX},${lc.y} ${lc.x},${lc.y}`;
+
+  svg += `<path d="${pathD}" fill="none" stroke="#111" stroke-width="1.5"/>`;
+});
+
+// Mitigation side — Bezier from top event, then line passes THROUGH each barrier to consequence
+consPositions.forEach((cp, j) => {
+  const rc = rightConnects[j];
+  const consLeftEdge = consX;
+  const firstBarrierLeft = cp.barrierXs[0];
+  const horizontalStartX = firstBarrierLeft - 30;
+
+  // Bezier from top event perimeter point to start of horizontal segment
+  const cpX = (rc.x + horizontalStartX) / 2;
+  let pathD = `M ${rc.x},${rc.y} C ${cpX},${rc.y} ${cpX},${cp.cy} ${horizontalStartX},${cp.cy}`;
+
+  // Through each barrier box
+  cp.barrierXs.forEach(bx => {
+    pathD += ` L ${bx},${cp.cy}`;                     // enter barrier left center
+    pathD += ` L ${bx + barrierBoxW},${cp.cy}`;       // exit barrier right center
+  });
+
+  // Continue to consequence left tab
+  pathD += ` L ${consLeftEdge - 14},${cp.cy}`;
+
+  svg += `<path d="${pathD}" fill="none" stroke="#111" stroke-width="1.5"/>`;
+});
+
+// ==================== TOP EVENT ====================
+
+svg += `<circle cx="${cx}" cy="${cy}" r="${topEventR}" fill="url(#topEventGrad)"/>`;
+// Left connector square
+svg += `<rect x="${cx - topEventR - 4}" y="${cy - 4}" width="8" height="8" fill="#fff" stroke="#333" stroke-width="1.5"/>`;
+// Right connector square
+svg += `<rect x="${cx + topEventR - 4}" y="${cy - 4}" width="8" height="8" fill="#fff" stroke="#333" stroke-width="1.5"/>`;
+// White inner rectangle
+svg += `<rect x="${cx - 70}" y="${cy - 40}" width="140" height="80" rx="4" fill="#fff" stroke="#333" stroke-width="1.5"/>`;
+svg += `<text x="${cx}" y="${cy - 20}" font-size="13" font-weight="bold" fill="#111" text-anchor="middle" dominant-baseline="central">
+  <tspan x="${cx}" dy="0">Loss of containment</tspan>
+  <tspan x="${cx}" dy="18">during high-pressure</tspan>
+  <tspan x="${cx}" dy="18">gas transfer</tspan>
+</text>`;
+
+// ==================== HAZARD ====================
+
+svg += `<line x1="${cx}" y1="${hazardY + hazardH}" x2="${cx}" y2="${cy - topEventR}" stroke="#000" stroke-width="1.5"/>`;
+svg += `<rect x="${hazardX}" y="${hazardY}" width="${hazardW}" height="${hazardH}" rx="4" fill="url(#hazardStripe)"/>`;
+svg += `<rect x="${hazardX + 8}" y="${hazardY + 8}" width="${hazardW - 16}" height="${hazardH - 16}" rx="2" fill="#fff"/>`;
+svg += `<text x="${cx}" y="${hazardY + hazardH / 2}" font-size="12" font-weight="bold" fill="#000">High-pressure gas</text>`;
+
+// ==================== THREAT BOXES ====================
+
+threatPositions.forEach((tp, i) => {
+  const t = threats[i];
+  const tx = threatX;
+  const ty = tp.cy - threatBoxH / 2;
+
+  svg += `<rect x="${tx}" y="${ty}" width="${threatBoxW}" height="${threatBoxH}" rx="14" fill="url(#threatGrad)" stroke="#0A3880" stroke-width="2"/>`;
+
+  // Text lines
+  const lineCount = t.label.length;
+  const textStartY = tp.cy - (lineCount - 1) * 8.5;
+  t.label.forEach((line, li) => {
+    svg += `<text x="${tx + threatBoxW / 2}" y="${textStartY + li * 17}" font-size="13" font-weight="bold" fill="#fff">${line}</text>`;
+  });
+
+  // Right connector tab
+  svg += `<rect x="${tx + threatBoxW}" y="${tp.cy - 14}" width="14" height="28" rx="5" fill="#555" stroke="#333" stroke-width="1"/>`;
+});
+
+// ==================== CONSEQUENCE BOXES ====================
+
+consPositions.forEach((cp, j) => {
+  const c = consequences[j];
+  const cxPos = consX;
+  const cyPos = cp.cy - consBoxH / 2;
+
+  svg += `<rect x="${cxPos}" y="${cyPos}" width="${consBoxW}" height="${consBoxH}" rx="14" fill="url(#consequenceGrad)" stroke="#7f0000" stroke-width="2"/>`;
+
+  // Left connector tab
+  svg += `<rect x="${cxPos - 14}" y="${cp.cy - 14}" width="14" height="28" rx="5" fill="#555" stroke="#333" stroke-width="1"/>`;
+
+  // Text lines
+  const lineCount = c.label.length;
+  const textStartY = cp.cy - (lineCount - 1) * 8.5;
+  c.label.forEach((line, li) => {
+    svg += `<text x="${cxPos + consBoxW / 2}" y="${textStartY + li * 17}" font-size="13" font-weight="bold" fill="#fff">${line}</text>`;
+  });
+
+  // Traffic light indicators
+  const tlY = cyPos + consBoxH - 18;
+  const tlX = cxPos + consBoxW - 42;
+  svg += `<rect x="${tlX}" y="${tlY}" width="12" height="12" rx="2" fill="#4CAF50"/>`;
+  svg += `<rect x="${tlX + 15}" y="${tlY}" width="12" height="12" rx="2" fill="#FF9800"/>`;
+  svg += `<rect x="${tlX + 30}" y="${tlY}" width="12" height="12" rx="2" fill="#F44336"/>`;
+});
+
+// ==================== PREVENTION BARRIERS ====================
+
+threatPositions.forEach((tp, i) => {
+  const t = threats[i];
+  tp.barrierXs.forEach((bx, k) => {
+    const by = tp.cy - barrierBoxH / 2;
+    const barrier = t.barriers[k];
+
+    svg += `<g transform="translate(${bx}, ${by})">`;
+    svg += `<rect x="0" y="0" width="${barrierBoxW}" height="${barrierBoxH}" fill="#fff" stroke="#333" stroke-width="1.5"/>`;
+    // Top connector tabs
+    svg += `<rect x="30" y="-11" width="16" height="22" rx="4" fill="#444" stroke="#222" stroke-width="1"/>`;
+    svg += `<rect x="80" y="-11" width="16" height="22" rx="4" fill="#444" stroke="#222" stroke-width="1"/>`;
+    // Bottom connector tab
+    svg += `<rect x="57" y="${barrierBoxH - 11}" width="16" height="22" rx="4" fill="#444" stroke="#222" stroke-width="1"/>`;
+
+    // Text lines
+    const lineCount = barrier.length;
+    const textStartY = barrierBoxH / 2 - (lineCount - 1) * 8;
+    barrier.forEach((line, li) => {
+      svg += `<text x="${barrierBoxW / 2}" y="${textStartY + li * 16}" font-size="12" font-weight="bold" fill="#000">${line}</text>`;
+    });
+
+    svg += `</g>`;
+  });
+});
+
+// ==================== MITIGATION BARRIERS ====================
+
+consPositions.forEach((cp, j) => {
+  cp.barrierXs.forEach((bx) => {
+    const by = cp.cy - barrierBoxH / 2;
+
+    svg += `<g transform="translate(${bx}, ${by})">`;
+    svg += `<rect x="0" y="0" width="${barrierBoxW}" height="${barrierBoxH}" fill="#fff" stroke="#333" stroke-width="1.5"/>`;
+    svg += `<rect x="30" y="-11" width="16" height="22" rx="4" fill="#444" stroke="#222" stroke-width="1"/>`;
+    svg += `<rect x="80" y="-11" width="16" height="22" rx="4" fill="#444" stroke="#222" stroke-width="1"/>`;
+    svg += `<rect x="57" y="${barrierBoxH - 11}" width="16" height="22" rx="4" fill="#444" stroke="#222" stroke-width="1"/>`;
+    svg += `<text x="${barrierBoxW / 2}" y="${barrierBoxH / 2 - 8}" font-size="12" font-weight="bold" fill="#000">Emergency</text>`;
+    svg += `<text x="${barrierBoxW / 2}" y="${barrierBoxH / 2 + 8}" font-size="12" font-weight="bold" fill="#000">Response Plan</text>`;
+    svg += `</g>`;
+  });
+});
+
+// ==================== RENDER ====================
+
+const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+svgEl.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+svgEl.setAttribute('viewBox', `0 0 ${CW} ${svgH}`);
+svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+svgEl.innerHTML = svg;
+document.body.appendChild(svgEl);
+
+// Fit SVG to viewport
+function fitSVG() {
+  const w = window.outerWidth || 1280;
+  const h = window.outerHeight || 672;
+  svgEl.setAttribute('width', w);
+  svgEl.setAttribute('height', h);
+}
+fitSVG();
+window.addEventListener('resize', fitSVG);
+</script>
+</body>
+</html>
